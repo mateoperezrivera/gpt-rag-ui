@@ -2,11 +2,24 @@ import logging
 import os
 from io import BytesIO
 
+from azure.identity import ChainedTokenCredential, ManagedIdentityCredential, AzureCliCredential
+
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 from chainlit.server import app as chainlit_app
 
 from connectors import BlobClient
+
+# Load environment variables from Azure App Configuration
+from azure.appconfiguration import AzureAppConfigurationClient
+credential = ChainedTokenCredential( ManagedIdentityCredential(), AzureCliCredential())
+endpoint = os.getenv("APPCONFIG_ENDPOINT")
+if not endpoint:
+    raise EnvironmentError("APPCONFIG_ENDPOINT must be set")
+client = AzureAppConfigurationClient(base_url=endpoint, credential=credential)
+for kv in client.list_configuration_settings():
+    os.environ[kv.key] = kv.value
+
 
 # Logging configuration
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper(), force=True)

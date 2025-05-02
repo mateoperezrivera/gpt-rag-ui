@@ -5,6 +5,7 @@ httpx
 msal
 python-dotenv
 azure-identity
+azure-appconfiguration==1.7.1
 azure-storage-blob
 starlette 
 itsdangerous
