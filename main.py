@@ -13,9 +13,9 @@ from connectors import BlobClient
 # Load environment variables from Azure App Configuration
 from azure.appconfiguration import AzureAppConfigurationClient
 credential = ChainedTokenCredential( ManagedIdentityCredential(), AzureCliCredential())
-endpoint = os.getenv("APPCONFIG_ENDPOINT")
+endpoint = os.getenv("APP_CONFIG_ENDPOINT")
 if not endpoint:
-    raise EnvironmentError("APPCONFIG_ENDPOINT must be set")
+    raise EnvironmentError("APP_CONFIG_ENDPOINT must be set")
 client = AzureAppConfigurationClient(base_url=endpoint, credential=credential)
 for kv in client.list_configuration_settings():
     os.environ[kv.key] = kv.value
@@ -53,9 +53,9 @@ def download_from_blob(file_name: str) -> bytes:
         logging.error(f"[chainlit_app] Error downloading blob {file_name}: {e}")
         raise
 
-account_name = get_env_var("STORAGE_ACCOUNT")
-documents_container = get_env_var("STORAGE_CONTAINER")
-images_container = get_env_var("STORAGE_CONTAINER_IMAGES")
+account_name = get_env_var("STORAGE_ACCOUNT_NAME")
+documents_container = get_env_var("STORAGE_ACCOUNT_CONTAINER_DOCS")
+images_container = get_env_var("STORAGE_ACCOUNT_CONTAINER_IMAGES")
 
 def handle_file_download(file_path: str):
     try:

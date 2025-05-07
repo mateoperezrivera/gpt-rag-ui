@@ -14,53 +14,16 @@ def get_managed_identity_token():
     token = credential.get_token("https://management.azure.com/.default").token
     return token
 
-def get_function_key():
-    subscription_id = os.getenv('AZURE_SUBSCRIPTION_ID')
-    resource_group = os.getenv('AZURE_RESOURCE_GROUP_NAME')
-    function_app_name = os.getenv('AZURE_ORCHESTRATOR_FUNC_NAME')
-    token = get_managed_identity_token()
-    logging.info("[orchestrator_client] Obtaining function key.")
-    
-    # URL to get all function keys, including the default one
-    requestUrl = f"https://management.azure.com/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Web/sites/{function_app_name}/functions/orchestrator_streaming/listKeys?api-version=2022-03-01"
-    
-    requestHeaders = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.post(requestUrl, headers=requestHeaders)
-    
-    # Check for HTTP errors
-    if response.status_code >= 400:
-        logging.error(f"[orchestrator_client] Failed to obtain function key. HTTP status code: {response.status_code}. Error details: {response.text}")
-        function_key = None
-    else:    
-        try:
-            response_json = response.json()
-            function_key = response_json['default']
-        except KeyError as e:
-            function_key = None
-            logging.error(f"[orchestrator_client] Error when getting function key. Details: {str(e)}.")
-    
-    return function_key
-
 async def call_orchestrator_stream(conversation_id: str, question: str, auth_info: dict):
 
-    url = os.getenv("ORCHESTRATOR_STREAM_ENDPOINT")
+    url = os.getenv("ORCHESTRATOR_CONTAINER_APP_ENDPOINT")
     if not url:
-        raise Exception("ORCHESTRATOR_STREAM_ENDPOINT not set in environment variables")
+        raise Exception("ORCHESTRATOR_CONTAINER_APP_ENDPOINT not set in environment variables")
 
-    if 'localhost' in url:
-        function_key = "dont_need_function_key"
-    else:
-        function_key = get_function_key()
-        if not function_key:
-            raise Exception(f"Error getting function key. Conversation ID: {conversation_id if conversation_id else 'N/A'}")
+    url = url.rstrip("/") + "/api/orcstream"
 
     headers = {
-            'Content-Type': 'application/json',
-            'x-functions-key': function_key  
+            'Content-Type': 'application/json'
         }
 
     payload = {
