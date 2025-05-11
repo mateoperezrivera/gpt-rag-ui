@@ -7,18 +7,18 @@ hooks:
   predeploy:
     posix:
       shell: sh
-      run: scripts/hooks/predeploy.sh
+      run: scripts/hooks/preDeploy.sh
       interactive: true
     windows:
       shell: pwsh
-      run: scripts/hooks/predeploy.ps1
+      run: scripts/hooks/preDeploy.ps1
       interactive: true
   preprovision:
     posix:
-      run: scripts/hooks/preprovision.sh
+      run: scripts/hooks/preProvision.sh
       interactive: true
     windows:
-      run: scripts/hooks/preprovision.ps1
+      run: scripts/hooks/preProvision.ps1
       interactive: true      
 services:
   frontend:

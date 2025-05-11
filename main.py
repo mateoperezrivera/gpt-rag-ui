@@ -17,9 +17,8 @@ endpoint = os.getenv("APP_CONFIG_ENDPOINT")
 if not endpoint:
     raise EnvironmentError("APP_CONFIG_ENDPOINT must be set")
 client = AzureAppConfigurationClient(base_url=endpoint, credential=credential)
-for kv in client.list_configuration_settings():
+for kv in client.list_configuration_settings(label_filter="frontend"):
     os.environ[kv.key] = kv.value
-
 
 # Logging configuration
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper(), force=True)
