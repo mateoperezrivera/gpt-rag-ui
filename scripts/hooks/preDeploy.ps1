@@ -81,8 +81,8 @@ Write-Host "⬇️  Installing requirements…" -ForegroundColor $Blue
 pip install --upgrade pip
 pip install -r scripts/appconfig/requirements.txt
 
-Write-Host "🚀 Running validate_app_settings.py…" -ForegroundColor $Blue
-python -m scripts.appconfig.validate_app_settings
+Write-Host "🚀 Running app_defaults.py…" -ForegroundColor $Blue
+python -m scripts.appconfig.app_defaults
 Write-Host "✅ Finished app settings validation." -ForegroundColor $Green
 
 # Clean up virtual environment

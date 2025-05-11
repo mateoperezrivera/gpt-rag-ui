@@ -80,8 +80,8 @@ source scripts/appconfig/.venv_temp/bin/activate
 echo -e "${BLUE}⬇️  Installing requirements…${NC}"
 pip install --upgrade pip
 pip install -r scripts/appconfig/requirements.txt
-echo -e "${BLUE}🚀 Running validate_app_settings.py…${NC}"
-python -m scripts.appconfig.validate_app_settings
+echo -e "${BLUE}🚀 Running app_defaults.py…${NC}"
+python -m scripts.appconfig.app_defaults
 echo -e "${GREEN}✅ Finished app settings validation.${NC}"
 
 # clean up venv only if we created it
