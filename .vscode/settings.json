@@ -1,4 +1,0 @@
-{
-    "appService.defaultWebAppToDeploy": "/subscriptions/4c7ae2e2-8d3e-4712-9b7d-04ccbdcc7e70/resourceGroups/rg-0319251131/providers/Microsoft.Web/sites/webgpt0-btwicmdc6x6vo",
-    "appService.deploySubpath": "."
-}
