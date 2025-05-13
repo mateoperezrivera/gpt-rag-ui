@@ -20,7 +20,7 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
     if not url:
         raise Exception("ORCHESTRATOR_CONTAINER_APP_ENDPOINT not set in environment variables")
 
-    url = url.rstrip("/") + "/api/orcstream"
+    url = url.rstrip("/") + "/orcstream"
 
     headers = {
             'Content-Type': 'application/json'
