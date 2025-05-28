@@ -8,3 +8,5 @@ azure-identity
 azure-storage-blob
 starlette 
 itsdangerous
+azure-cosmos==4.9.0
+semantic-kernel

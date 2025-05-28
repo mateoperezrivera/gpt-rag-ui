@@ -4,7 +4,8 @@ import uuid
 import logging
 import urllib.parse
 from typing import Optional, Tuple
-
+from semantic_kernel.contents import ChatHistory
+from chainlit.types import ThreadDict
 import chainlit as cl
 
 from orchestrator_client import call_orchestrator_stream
@@ -80,7 +81,8 @@ if ENABLE_AUTHENTICATION:
 # Chainlit event handlers
 @cl.on_chat_start
 async def on_chat_start():
-    pass
+    chatHistory = ChatHistory()
+    cl.user_session.set("chat_history", chatHistory)
     # app_user = cl.user_session.get("user")
     # if app_user:
         # await cl.Message(content=f"Hello {app_user.metadata.get('user_name')}").send()
@@ -88,6 +90,7 @@ async def on_chat_start():
 
 @cl.on_message
 async def handle_message(message: cl.Message):
+    chat_history = cl.user_session.get("chat_history")  # type: ChatHistory
     message.id = message.id or str(uuid.uuid4())
     conversation_id = cl.user_session.get("conversation_id") or ""
     response_msg = cl.Message(content="")
@@ -99,7 +102,7 @@ async def handle_message(message: cl.Message):
             "If you think you should, please reach out to your administrator for help."
         )
         return
-
+    chat_history.add_user_message(message.content)
     await response_msg.stream_token(" ")
 
     buffer = ""
@@ -162,9 +165,21 @@ async def handle_message(message: cl.Message):
 
     cl.user_session.set("conversation_id", conversation_id)
     await response_msg.update()
-
+    
     # Final reference handling and update
     # references.update(REFERENCE_REGEX.findall(full_text))
     # final_text = replace_source_reference_links(full_text.replace(TERMINATE_TOKEN, ""))
     # response_msg.content = final_text
     await response_msg.update()
+    chat_history.add_assistant_message(response_msg.content)
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict):
+    chat_history = ChatHistory()
+    root_messages = [m for m in thread["steps"] if m["parentId"] == None]
+    for message in root_messages:
+        if message["type"] == "user_message":
+            chat_history.add_user_message(message["output"])
+        else:
+            chat_history.add_assistant_message(message["output"])
+    cl.user_session.set("chat_history", chat_history)
