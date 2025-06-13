@@ -23,7 +23,6 @@ This repo provides a user interface built with [Chainlit](https://www.chainlit.i
 
 Before deploying the web application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag/tree/feature/vnext-architecture) repo. This includes creating all necessary Azure resources required to support the application runtime.
 
-
 ## How to deploy the web app
 
 ```shell
