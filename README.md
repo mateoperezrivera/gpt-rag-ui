@@ -1,5 +1,3 @@
-Part of [GPT‑RAG](https://aka.ms/gpt-rag)
-
 <!-- 
 page_type: sample
 languages:
@@ -20,8 +18,6 @@ description: GPT-RAG core is a Retrieval-Augmented Generation pattern running in
 Part of the [GPT-RAG](https://github.com/Azure/gpt-rag) solution.
 
 This repo provides a user interface built with [Chainlit](https://www.chainlit.io/) to interact with GPT-powered retrieval-augmented generation systems. It is designed to work seamlessly with the Orchestrator backend and supports customization and theming.
-
-## Prerequisites
 
 ## Prerequisites
 
