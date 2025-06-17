@@ -9,19 +9,14 @@ from fastapi.responses import StreamingResponse
 from chainlit.server import app as chainlit_app
 
 from connectors import BlobClient
+from connectors import AppConfigClient
 
 # Load environment variables from Azure App Configuration
-from azure.appconfiguration import AzureAppConfigurationClient
-credential = ChainedTokenCredential( ManagedIdentityCredential(), AzureCliCredential())
-endpoint = os.getenv("APP_CONFIG_ENDPOINT")
-if not endpoint:
-    raise EnvironmentError("APP_CONFIG_ENDPOINT must be set")
-client = AzureAppConfigurationClient(base_url=endpoint, credential=credential)
-for kv in client.list_configuration_settings(label_filter="frontend"):
-    os.environ[kv.key] = kv.value
+app_config_client = AppConfigClient()
+app_config_client.apply_environment_settings()
 
 # Logging configuration
-logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper(), force=True)
+logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO').upper(), force=True)
 logging.getLogger("azure").setLevel(os.environ.get('AZURE_LOGLEVEL', 'WARNING').upper())
 logging.getLogger("httpx").setLevel(os.environ.get('HTTPX_LOGLEVEL', 'ERROR').upper())
 logging.getLogger("httpcore").setLevel(os.environ.get('HTTPCORE_LOGLEVEL', 'ERROR').upper())
@@ -53,8 +48,8 @@ def download_from_blob(file_name: str) -> bytes:
         raise
 
 account_name = get_env_var("STORAGE_ACCOUNT_NAME")
-documents_container = get_env_var("STORAGE_ACCOUNT_CONTAINER_DOCS")
-images_container = get_env_var("STORAGE_ACCOUNT_CONTAINER_IMAGES")
+documents_container = get_env_var("DOCUMENTS_STORAGE_CONTAINER")
+images_container = get_env_var("DOCUMENTS_IMAGES_STORAGE_CONTAINER")
 
 def handle_file_download(file_path: str):
     try:

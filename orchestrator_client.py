@@ -16,9 +16,9 @@ def get_managed_identity_token():
 
 async def call_orchestrator_stream(conversation_id: str, question: str, auth_info: dict):
 
-    url = os.getenv("ORCHESTRATOR_CONTAINER_APP_ENDPOINT")
+    url = os.getenv("ORCHESTRATOR_APP_ENDPOINT")
     if not url:
-        raise Exception("ORCHESTRATOR_CONTAINER_APP_ENDPOINT not set in environment variables")
+        raise Exception("ORCHESTRATOR_APP_ENDPOINT not set in environment variables")
 
     url = url.rstrip("/") + "/orcstream"
 
