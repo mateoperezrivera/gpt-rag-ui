@@ -1,34 +1,30 @@
-import os
-import json
 import httpx
-import logging
-from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
-import requests
 
-# Obtain the token using Managed Identity
-def get_managed_identity_token():
-    credential = ChainedTokenCredential(
-        ManagedIdentityCredential(),
-        AzureCliCredential()
-    )
-    token = credential.get_token("https://management.azure.com/.default").token
-    return token
+from dependencies import get_config
+
+config = get_config()
 
 async def call_orchestrator_stream(conversation_id: str, question: str, auth_info: dict):
 
-    url = os.getenv("ORCHESTRATOR_APP_ENDPOINT")
+    url = config.get("ORCHESTRATOR_APP_ENDPOINT")
     if not url:
         raise Exception("ORCHESTRATOR_APP_ENDPOINT not set in environment variables")
 
-    url = url.rstrip("/") + "/orcstream"
+    url = url.rstrip('/') + '/orchestrator'
+
+    api_key = config.get("ORCHESTRATOR_APP_APIKEY")
 
     headers = {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
         }
+    
+    if api_key:
+        headers['X-API-KEY'] = api_key
 
     payload = {
         "conversation_id": conversation_id,
-        "question": question,
+        "question": question, #for backward compatibility
+        "ask": question,
         "client_principal_id": auth_info.get('client_principal_id', 'no-auth'),
         "client_principal_name": auth_info.get('client_principal_name', 'anonymous'),
         "client_group_names": auth_info.get('client_group_names', []),

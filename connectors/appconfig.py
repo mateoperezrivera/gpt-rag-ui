@@ -5,6 +5,9 @@ from azure.appconfiguration import AzureAppConfigurationClient
 from azure.core.exceptions import AzureError
 
 class AppConfigClient:
+    
+    allow_env_vars : bool = True
+
     def __init__(self):
         """
         Bulk-loads all keys labeled 'gpt-rag-ui' and 'gpt-rag' into an in-memory dict,
@@ -50,10 +53,30 @@ class AppConfigClient:
         for setting in self.client.list_configuration_settings(label_filter="gpt-rag"):
             os.environ.setdefault(setting.key, setting.value)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: Any = None, type: type = str) -> Any:
         """
         Returns the in-memory value for the given key.
 
         If the key was not found under either label, returns `default`.
         """
-        return self._settings.get(key, default)
+        if self.allow_env_vars is True:
+            value = os.environ.get(key)
+            
+        if value is None:
+            value = self._settings.get(key, default)
+
+        if value is None:
+            return default
+
+        if value is not None:
+            if type is not None:
+                if type is bool:
+                    if isinstance(value, str):
+                        value = value.lower() in ['true', '1', 'yes']
+                else:
+                    try:
+                        value = type(value)
+                    except ValueError as e:
+                        raise Exception(f'Value for {key} could not be converted to {type.__name__}. Error: {e}')
+            
+        return value
