@@ -5,25 +5,16 @@ from io import BytesIO
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 from chainlit.server import app as chainlit_app
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 from connectors import BlobClient
+from connectors import AppConfigClient
 
-# Logging configuration
-logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper(), force=True)
-logging.getLogger("azure").setLevel(os.environ.get('AZURE_LOGLEVEL', 'WARNING').upper())
-logging.getLogger("httpx").setLevel(os.environ.get('HTTPX_LOGLEVEL', 'ERROR').upper())
-logging.getLogger("httpcore").setLevel(os.environ.get('HTTPCORE_LOGLEVEL', 'ERROR').upper())
-logging.getLogger("urllib3").setLevel(os.environ.get('URLLIB3_LOGLEVEL', 'WARNING').upper())
-logging.getLogger("urllib3.connectionpool").setLevel(os.environ.get('URLLIB3_CONNECTIONPOOL_LOGLEVEL', 'WARNING').upper())
-logging.getLogger("uvicorn.error").propagate = True
-logging.getLogger("uvicorn.access").propagate = True
+from dependencies import get_config
 
-def get_env_var(var_name: str) -> str:
-    """Retrieve required environment variable or raise error."""
-    value = os.getenv(var_name)
-    if not value:
-        raise EnvironmentError(f"{var_name} is not set.")
-    return value
+# Load environment variables from Azure App Configuration
+config : AppConfigClient = get_config()
 
 def download_from_blob(file_name: str) -> bytes:
     logging.info("[chainlit_app] Downloading file: %s", file_name)
@@ -40,9 +31,9 @@ def download_from_blob(file_name: str) -> bytes:
         logging.error(f"[chainlit_app] Error downloading blob {file_name}: {e}")
         raise
 
-account_name = get_env_var("STORAGE_ACCOUNT")
-documents_container = get_env_var("STORAGE_CONTAINER")
-images_container = get_env_var("STORAGE_CONTAINER_IMAGES")
+account_name = config.get("STORAGE_ACCOUNT_NAME")
+documents_container = config.get("DOCUMENTS_STORAGE_CONTAINER")
+images_container = config.get("DOCUMENTS_IMAGES_STORAGE_CONTAINER")
 
 def handle_file_download(file_path: str):
     try:
@@ -96,3 +87,6 @@ import app
 
 # ASGI entry point
 app = chainlit_app
+
+FastAPIInstrumentor.instrument_app(app)
+HTTPXClientInstrumentor().instrument()
