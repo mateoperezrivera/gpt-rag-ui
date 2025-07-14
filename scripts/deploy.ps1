@@ -198,7 +198,7 @@ if ($env:tag) {
 #endregion
 
 #region Build or ACR build image
-$fullImageName = "$($values.CONTAINER_REGISTRY_LOGIN_SERVER)/azure-gpt-rag/frontend-build:$tag"
+$fullImageName = "$($values.CONTAINER_REGISTRY_LOGIN_SERVER)/azure-gpt-rag/frontend:$tag"
 Write-Green "🛠️  Building Docker image…"
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     try {
@@ -214,7 +214,7 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     try {
         az acr build `
             --registry $values.CONTAINER_REGISTRY_NAME `
-            --image "azure-gpt-rag/frontend-build:$tag" `
+            --image "azure-gpt-rag/frontend:$tag" `
             --file Dockerfile `
             .
         Write-Green "✅ ACR cloud build succeeded."
@@ -257,6 +257,28 @@ try {
 } catch {
     $errMsg = $_.Exception.Message
     Write-Yellow ("⚠️  Failed to update container app: {0}" -f $errMsg)
+    exit 1
+}
+
+#get the current revision
+Write-Blue "🔍 Fetching current revision…"
+$currentRevision = az containerapp revision list `
+    --name $values.FRONTEND_APP_NAME `
+    --resource-group $values.RESOURCE_GROUP_NAME `
+    --query "[0].name" -o tsv
+
+#region Restart Container App
+Write-Green "🔄 Restarting container app…"
+try {
+    az containerapp revision restart `
+        --name $values.FRONTEND_APP_NAME `
+        --resource-group $values.RESOURCE_GROUP_NAME `
+        --revision $currentRevision
+        
+    Write-Green "✅ Container app restarted."
+} catch {
+    $errMsg = $_.Exception.Message
+    Write-Yellow ("⚠️  Failed to restart container app: {0}" -f $errMsg)
     exit 1
 }
 #endregion

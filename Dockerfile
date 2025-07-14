@@ -1,13 +1,15 @@
-# Use Python 3.12 slim base image
-FROM python:3.12-slim
+FROM mcr.microsoft.com/devcontainers/python:dev-3.12
+
+RUN apt-get update  
+RUN apt-get install ca-certificates -y
+RUN update-ca-certificates 
 
 # Set app dir
 WORKDIR /app
 
 # Copy and install dependencies
 COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Copy app code
 COPY . .

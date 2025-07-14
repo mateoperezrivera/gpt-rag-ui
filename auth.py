@@ -6,16 +6,19 @@ import httpx
 import msal
 import chainlit as cl
 
+from dependencies import get_config
+
+config = get_config()
 
 def read_env_list(var_name: str) -> List[str]:
     """Reads a comma-separated list from the environment variable."""
-    value = os.getenv(var_name, "")
+    value = config.get(var_name, "")
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def get_env_var(name: str, fallback: str = None) -> str:
     """Helper to fetch and log missing environment variables."""
-    value = os.getenv(name, fallback)
+    value = config.get(name, fallback)
     if value is None:
         logging.warning(f"[auth] Environment variable '{name}' is not set.")
     return value

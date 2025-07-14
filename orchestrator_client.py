@@ -2,6 +2,8 @@ import os
 import httpx
 import logging
 from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
+from dependencies import get_config
+config = get_config()
 
 # Obtain an Azure AD token via Managed Identity or Azure CLI credentials
 def get_managed_identity_token():
@@ -31,15 +33,20 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
         "Content-Type": "application/json",
         "dapr-api-token": dapr_token or ""
     }
-
+    
+    api_key = config.get("ORCHESTRATOR_APP_APIKEY")
+    if api_key:
+        headers['X-API-KEY'] = api_key
+    
     # Construct request body
     payload = {
         "conversation_id": conversation_id,
+        "question": question, #for backward compatibility
         "ask": question,
-        "client_principal_id": auth_info.get("client_principal_id", "no-auth"),
-        "client_principal_name": auth_info.get("client_principal_name", "anonymous"),
-        "client_group_names": auth_info.get("client_group_names", []),
-        "access_token": auth_info.get("access_token")
+        "client_principal_id": auth_info.get('client_principal_id', 'no-auth'),
+        "client_principal_name": auth_info.get('client_principal_name', 'anonymous'),
+        "client_group_names": auth_info.get('client_group_names', []),
+        "access_token": auth_info.get('access_token')
     }
 
     # Invoke through Dapr sidecar and stream response
