@@ -25,10 +25,11 @@ Before deploying the web application, you must provision the infrastructure as d
 
 ## How to deploy the web app
 
+Clone this repository and then run:
 ```shell
 azd env refresh
 azd deploy 
-````
+```
 > [!IMPORTANT]
 > When running `azd env refresh`, make sure to use the **same subscription**, **resource group**, and **environment name** that you used during the infrastructure deployment. This ensures consistency across components.
 
@@ -37,6 +38,11 @@ azd deploy
 - Modify theme in `public/theme.json`
 - Customize layout with `public/custom.css`
 - Adjust app behavior in `.chainlit/config.toml`
+
+## Release 1.0.0
+
+> [!NOTE]
+> If you want to use GPT-RAG original version, simply use the v1.0.0 release from the GitHub repository.
 
 ## 🤝 Contributing
 

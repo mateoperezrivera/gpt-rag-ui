@@ -158,7 +158,7 @@ Write-Host ""
 #endregion
 
 #region Login to ACR
-Write-Green ("🔐 Logging into ACR ({0})…" -f $values.CONTAINER_REGISTRY_NAME)
+Write-Green ("🔐 Logging into ACR ({0} in {1})…" -f $values.CONTAINER_REGISTRY_NAME, $values.RESOURCE_GROUP_NAME)
 try {
     az acr login --name $values.CONTAINER_REGISTRY_NAME --resource-group $values.RESOURCE_GROUP_NAME
     Write-Green "✅ Logged into ACR."
@@ -171,7 +171,7 @@ Write-Host ""
 #endregion
 
 #region Determine tag
-Write-Blue "🛢️ Defining tag…"
+Write-Blue "Defining tag..."
 if ($env:tag) {
     $tag = $env:tag.Trim()
     Write-Verbose ("Using tag from environment: {0}" -f $tag)
@@ -180,18 +180,21 @@ if ($env:tag) {
         $gitTag = & git rev-parse --short HEAD 2>$null
         if ($LASTEXITCODE -eq 0 -and $gitTag) {
             $tag = $gitTag.Trim()
+            Write-Verbose ("Using Git short HEAD as tag: {0}" -f $tag)
         } else {
-            Write-Yellow "⚠️  Could not get git short HEAD. Please set environment variable `tag`."
-            exit 1
+            Write-Yellow "Could not get Git short HEAD. Generating random tag."
+            $randomNumber = Get-Random -Minimum 100000 -Maximum 999999
+            $tag = "GPT$randomNumber"
+            Write-Verbose ("Generated random tag: {0}" -f $tag)
         }
     } catch {
         $errMsg = $_.Exception.Message
-        Write-Yellow ("⚠️  Error running git: {0}" -f $errMsg)
-        exit 1
+        Write-Yellow ("Error running Git: {0}. Generating random tag." -f $errMsg)
+        $randomNumber = Get-Random -Minimum 100000 -Maximum 999999
+        $tag = "GPT$randomNumber"
+        Write-Verbose ("Generated random tag: {0}" -f $tag)
     }
 }
-Write-Green ("✅ tag set to: {0}" -f $tag)
-Write-Host ""
 #endregion
 
 #region Build or ACR build image
