@@ -124,7 +124,7 @@ function Get-ConfigValue {
 }
 
 # Define required keys
-$keyNames = @('CONTAINER_REGISTRY_NAME', 'CONTAINER_REGISTRY_LOGIN_SERVER', 'RESOURCE_GROUP_NAME', 'FRONTEND_APP_NAME')
+$keyNames = @('CONTAINER_REGISTRY_NAME', 'CONTAINER_REGISTRY_LOGIN_SERVER', 'SUBSCRIPTION_ID', 'RESOURCE_GROUP_NAME', 'RESOURCE_TOKEN', 'FRONTEND_APP_NAME')
 $values = @{}
 $missing = @()
 
@@ -242,6 +242,38 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Host ""
 }
 #endregion
+
+#Make sure container registry is registered
+Write-Green "🔄 Updating container app registry…"
+try {
+    $ids = $(az containerapp identity show `
+        --name $values.FRONTEND_APP_NAME `
+        --resource-group $values.RESOURCE_GROUP_NAME `
+        --output json) | ConvertFrom-Json
+
+    if ($ids.type.tostring().contains("UserAssigned"))
+    {
+        az containerapp registry set `
+            --name $values.FRONTEND_APP_NAME `
+            --resource-group $values.RESOURCE_GROUP_NAME `
+            --server "$($values.CONTAINER_REGISTRY_NAME).azurecr.io" `
+            --identity "/subscriptions/$($values.SUBSCRIPTION_ID)/resourceGroups/$($values.RESOURCE_GROUP_NAME)/providers/Microsoft.ManagedIdentity/userAssignedIdentities/uai-ca-$($values.RESOURCE_TOKEN)-frontend" `
+    }
+    else {
+        az containerapp registry set `
+        --name $values.FRONTEND_APP_NAME `
+        --resource-group $values.RESOURCE_GROUP_NAME `
+        --server "$($values.CONTAINER_REGISTRY_NAME).azurecr.io" `
+        --identity "system"
+    }
+    
+
+    Write-Green "✅ Container app updated."
+} catch {
+    $errMsg = $_.Exception.Message
+    Write-Yellow ("⚠️  Failed to update container app: {0}" -f $errMsg)
+    exit 1
+}
 
 #region Update Container App
 Write-Green "🔄 Updating container app…"
