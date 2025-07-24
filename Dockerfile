@@ -18,4 +18,5 @@ COPY . .
 EXPOSE 80
 
 # Launch via Uvicorn
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 80 || sleep 3600"]
+#CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 80 || sleep 3600"]
+CMD ["chainlit", "run", "app.py", "--host", "0.0.0.0", "--port", "80"]

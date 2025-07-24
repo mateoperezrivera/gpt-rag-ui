@@ -1,4 +1,6 @@
 import os
+import logging
+
 from typing import Dict, Any
 from azure.identity import ChainedTokenCredential, ManagedIdentityCredential, AzureCliCredential
 from azure.appconfiguration import AzureAppConfigurationClient
@@ -13,11 +15,13 @@ class AppConfigClient:
         Bulk-loads all keys labeled 'gpt-rag-ui' and 'gpt-rag' into an in-memory dict,
         giving precedence to 'gpt-rag-ui' where a key exists in both.
         """
+        client_id = os.getenv("AZURE_CLIENT_ID")
+
         endpoint = os.getenv("APP_CONFIG_ENDPOINT")
         if not endpoint:
             raise EnvironmentError("APP_CONFIG_ENDPOINT must be set")
 
-        credential = ChainedTokenCredential(ManagedIdentityCredential(), AzureCliCredential())
+        credential = ChainedTokenCredential(ManagedIdentityCredential(client_id=client_id), AzureCliCredential())
         # make client available to other methods
         self.client = AzureAppConfigurationClient(base_url=endpoint, credential=credential)
 
@@ -30,14 +34,14 @@ class AppConfigClient:
             for setting in self.client.list_configuration_settings(label_filter="gpt-rag-ui"):
                 self._settings[setting.key] = setting.value
         except AzureError as e:
-            raise RuntimeError(f"Failed to bulk-load 'gpt-rag-ui' settings: {e}")
+            logging.info(f"Failed to bulk-load 'gpt-rag-ui' settings: {e}")
 
         # 2) Load “gpt-rag” ones only if not already present
         try:
             for setting in self.client.list_configuration_settings(label_filter="gpt-rag"):
                 self._settings.setdefault(setting.key, setting.value)
         except AzureError as e:
-            raise RuntimeError(f"Failed to bulk-load 'gpt-rag' settings: {e}")
+            logging.info(f"Failed to bulk-load 'gpt-rag' settings: {e}")
 
     def apply_environment_settings(self) -> None:
         """
