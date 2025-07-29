@@ -130,7 +130,11 @@ async def handle_message(message: cl.Message):
                     break
 
                 # Stream safe part of buffer
-                safe_flush_length = len(buffer) - (len(TERMINATE_TOKEN) - 1)
+                if token_index != -1:
+                    safe_flush_length = len(buffer) - (len(TERMINATE_TOKEN) - 1)
+                else:
+                    safe_flush_length = len(buffer)
+
                 if safe_flush_length > 0:
                     await response_msg.stream_token(buffer[:safe_flush_length])
                     buffer = buffer[safe_flush_length:]
