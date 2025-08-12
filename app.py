@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 import chainlit as cl
 
 from orchestrator_client import call_orchestrator_stream
+from feedback import register_feedback_handlers,create_feedback_actions
 from dependencies import get_config
 
 from constants import APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME, UUID_REGEX, REFERENCE_REGEX, TERMINATE_TOKEN
@@ -60,6 +61,9 @@ if ENABLE_AUTHENTICATION:
     import auth
 
 tracer = Telemetry.get_tracer(__name__)
+
+# Register feedback handlers
+register_feedback_handlers(check_authorization)
 
 # Chainlit event handlers
 @cl.on_chat_start
@@ -155,6 +159,9 @@ async def handle_message(message: cl.Message):
                     raise
 
         cl.user_session.set("conversation_id", conversation_id)
+        response_msg.actions = create_feedback_actions(
+            message.id, conversation_id, message.content
+        )
         await response_msg.update()
 
         # Final reference handling and update

@@ -61,3 +61,52 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
             async for chunk in response.aiter_text():
                 if chunk:
                     yield chunk
+
+
+
+async def call_orchestrator_for_feedback(
+        conversation_id: str, question_id: str,
+        ask: str, is_positive: bool, star_rating: str,
+        feedback_text: str, auth_info: dict
+    ):
+
+    # Read Dapr settings and target app ID
+    dapr_port = os.getenv("DAPR_HTTP_PORT", "3500")
+    # orchestrator_app_id = os.getenv("ORCHESTRATOR_APP_ID")
+    # if not orchestrator_app_id:
+    #     raise Exception("ORCHESTRATOR_APP_ID not set in environment variables")
+    orchestrator_app_id = "orchestrator"  # Default app ID for local development
+    # Build Dapr service invocation URL
+    url = f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
+
+    # Read the Dapr sidecar API token
+    dapr_token = os.getenv("DAPR_API_TOKEN")
+    if not dapr_token:
+        logging.warning("DAPR_API_TOKEN is not defined; Dapr calls may fail")
+
+    # Prepare headers: content-type + Dapr token
+    headers = {
+        "Content-Type": "application/json",
+        "dapr-api-token": dapr_token or ""
+    }
+    
+    api_key = config.get("ORCHESTRATOR_APP_APIKEY")
+    if api_key:
+        headers['X-API-KEY'] = api_key
+
+    payload = {
+        "type": "feedback",
+        "ask": ask,
+        "conversation_id": conversation_id,
+        "question_id": question_id,
+        "stars_rating": star_rating,
+        "feedback_text": feedback_text,
+        "access_token": auth_info.get('access_token'),
+        "is_positive": is_positive
+    }
+    
+    async with httpx.AsyncClient(timeout=None) as client:
+        response = await client.post(url, json=payload, headers=headers)
+        if response.status_code >= 400:
+            raise Exception(f"Error calling orchestrator for feedback. HTTP status code: {response.status_code}, status: {response.reason_phrase}")
+        return True
