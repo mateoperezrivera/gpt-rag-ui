@@ -16,25 +16,22 @@ def get_managed_identity_token():
 async def call_orchestrator_stream(conversation_id: str, question: str, auth_info: dict):
     # Read Dapr settings and target app ID
     dapr_port = os.getenv("DAPR_HTTP_PORT", "3500")
-    # orchestrator_app_id = os.getenv("ORCHESTRATOR_APP_ID")
-    # if not orchestrator_app_id:
-    #     raise Exception("ORCHESTRATOR_APP_ID not set in environment variables")
-    orchestrator_app_id = "orchestrator"  # Default app ID for local development
-    # Build Dapr service invocation URL
+    orchestrator_app_id = "orchestrator" 
     url = f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
 
     # Read the Dapr sidecar API token
     dapr_token = os.getenv("DAPR_API_TOKEN")
     if not dapr_token:
-        logging.warning("DAPR_API_TOKEN is not defined; Dapr calls may fail")
+        logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
-    # Prepare headers: content-type + Dapr token
+    # Prepare headers: content-type and optional Dapr token
     headers = {
         "Content-Type": "application/json",
-        "dapr-api-token": dapr_token or ""
     }
+    if dapr_token:
+        headers["dapr-api-token"] = dapr_token
     
-    api_key = config.get("ORCHESTRATOR_APP_APIKEY")
+    api_key = config.get("ORCHESTRATOR_APP_APIKEY", "")
     if api_key:
         headers['X-API-KEY'] = api_key
     
@@ -55,7 +52,7 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
             if response.status_code >= 400:
                 body = await response.aread()
                 raise Exception(
-                    f"Error invoking via Dapr (HTTP {response.status_code}): "
+                    f"Error invoking orchestrator (HTTP {response.status_code}): "
                     f"{response.reason_phrase}. Details: {body.decode(errors='ignore')}"
                 )
             async for chunk in response.aiter_text():
