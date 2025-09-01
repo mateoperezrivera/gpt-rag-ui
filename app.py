@@ -19,6 +19,8 @@ config = get_config()
 
 Telemetry.configure_monitoring(config, APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME)
 
+ENABLE_FEEDBACK = config.get("ENABLE_USER_FEEDBACK", False, bool)
+
 def extract_conversation_id_from_chunk(chunk: str) -> Tuple[Optional[str], str]:
     match = UUID_REGEX.match(chunk)
     if match:
@@ -63,7 +65,8 @@ if ENABLE_AUTHENTICATION:
 tracer = Telemetry.get_tracer(__name__)
 
 # Register feedback handlers
-register_feedback_handlers(check_authorization)
+if ENABLE_FEEDBACK:
+    register_feedback_handlers(check_authorization)
 
 # Chainlit event handlers
 @cl.on_chat_start
@@ -90,7 +93,7 @@ async def handle_message(message: cl.Message):
             )
             return
         
-        span.set_attribute('message_id', message.id)
+        span.set_attribute('question_id', message.id)
         span.set_attribute('conversation_id', conversation_id)
         span.set_attribute('user_id', app_user.metadata.get('client_principal_id', 'no-auth') if app_user else 'anonymous')
 
@@ -100,7 +103,7 @@ async def handle_message(message: cl.Message):
         full_text = ""
         references = set()
         auth_info = check_authorization()
-        generator = call_orchestrator_stream(conversation_id, message.content, auth_info)
+        generator = call_orchestrator_stream(conversation_id, message.content, auth_info, message.id)
 
         try:
             async for chunk in generator:
@@ -159,9 +162,10 @@ async def handle_message(message: cl.Message):
                     raise
 
         cl.user_session.set("conversation_id", conversation_id)
-        response_msg.actions = create_feedback_actions(
-            message.id, conversation_id, message.content
-        )
+        if ENABLE_FEEDBACK:
+            response_msg.actions = create_feedback_actions(
+                message.id, conversation_id, message.content
+            )
         await response_msg.update()
 
         # Final reference handling and update

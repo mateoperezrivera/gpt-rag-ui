@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Star, Send } from "lucide-react";
 
-export default function FeedbackFormPopup() {
+export default function FeedbackFormPopup(props) {
   const [open, setOpen] = React.useState(true);
   const [text, setText] = React.useState("");
   const [rating, setRating] = React.useState(0);
@@ -48,11 +48,11 @@ export default function FeedbackFormPopup() {
       name: "submit_feedback",
       payload: { text,
         rating,
-        isPositive: props.isPositive,
-        questionId: props.questionId,
-        ask: props.ask,
-        auth_info: props.authInfo, 
-        conversationId: props.conversationId 
+  isPositive: props?.isPositive,
+  questionId: props?.questionId,
+  ask: props?.ask,
+  auth_info: props?.authInfo, 
+  conversationId: props?.conversationId 
       },
     });
 
@@ -68,7 +68,7 @@ export default function FeedbackFormPopup() {
       // Dialog is being closed
       await callAction({
         name: "close_feedback_popup",
-        payload: { questionId: props.questionId },
+        payload: { questionId: props?.questionId },
       });
     }
     setOpen(val);
