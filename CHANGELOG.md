@@ -5,7 +5,9 @@ This format follows [Keep a Changelog](https://keepachangelog.com/) and adheres 
 
 ## [v2.1.0] – 2025-08-31
 ### Added
-- User Feedback Loop
+- User Feedback Loop. [#358](https://github.com/Azure/GPT-RAG/issues/358) 
+### Changed
+- Standardized resource group variable as `AZURE_RESOURCE_GROUP`. [#365](https://github.com/Azure/GPT-RAG/issues/365)
 
 ## [v2.0.2] – 2025-08-18
 ### Added
