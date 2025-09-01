@@ -39,10 +39,10 @@ azd deploy
 - Customize layout with `public/custom.css`
 - Adjust app behavior in `.chainlit/config.toml`
 
-## Release 1.0.0
+## Previous Releases
 
-> [!NOTE]
-> If you want to use GPT-RAG original version, simply use the v1.0.0 release from the GitHub repository.
+> [!NOTE]  
+> For earlier versions, use the corresponding release in the GitHub repository (e.g., v1.0.0 for the initial version).
 
 ## 🤝 Contributing
 
