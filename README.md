@@ -21,9 +21,9 @@ This repo provides a user interface built with [Chainlit](https://www.chainlit.i
 
 ## Prerequisites
 
-Before deploying the web application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag/tree/feature/vnext-architecture) repo. This includes creating all necessary Azure resources required to support the application runtime.
+Before deploying the application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag) repo. This includes creating all necessary Azure resources required to support the application runtime.
 
-## How to deploy the web app
+## Deploying the app with azd (recommended)
 
 Initialize the template:
 ```shell
@@ -39,6 +39,24 @@ azd deploy
 ```
 > [!IMPORTANT]
 > Run `azd env refresh` with the **same subscription** and **resource group** used in the infrastructure deployment.
+
+## Deploying the app with a shell script
+
+You need to set the App Configuration endpoint and run the deploy script.
+
+#### Bash (Linux/macOS):
+
+```bash
+export APP_CONFIG_ENDPOINT="https://<your-app-config-name>.azconfig.io"
+./scripts/deploy.sh
+```
+
+#### PowerShell (Windows):
+
+```powershell
+$env:APP_CONFIG_ENDPOINT = "https://<your-app-config-name>.azconfig.io"
+.\scripts\deploy.ps1
+```
 
 ## 🎨 Customization
 
@@ -59,4 +77,5 @@ We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/gpt-rag
 
 
 This project may contain trademarks or logos. Authorized use of Microsoft trademarks or logos must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Modified versions must not imply sponsorship or cause confusion. Third-party trademarks are subject to their own policies.
+
 
