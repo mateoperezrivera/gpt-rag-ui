@@ -23,7 +23,15 @@ This repo provides a user interface built with [Chainlit](https://www.chainlit.i
 
 Before deploying the application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag) repo. This includes creating all necessary Azure resources required to support the application runtime.
 
-## Deploying the app with azd (recommended)
+## Deployment steps
+
+Make sure you're logged in to Azure before anything else:
+
+```bash
+az login
+```
+
+### Deploying the app with azd (recommended)
 
 Initialize the template:
 ```shell
@@ -40,11 +48,11 @@ azd deploy
 > [!IMPORTANT]
 > Run `azd env refresh` with the **same subscription** and **resource group** used in the infrastructure deployment.
 
-## Deploying the app with a shell script
+### Deploying the app with a shell script
 
 To deploy using a script, first clone the repository, set the App Configuration endpoint, and then run the deployment script.
 
-#### PowerShell (Windows)
+##### PowerShell (Windows)
 
 ```powershell
 git clone https://github.com/Azure/gpt-rag-ui.git
@@ -53,7 +61,7 @@ cd gpt-rag-ui
 .\scripts\deploy.ps1
 ```
 
-#### Bash (Linux/macOS)
+##### Bash (Linux/macOS)
 ```bash
 git clone https://github.com/Azure/gpt-rag-ui.git
 export APP_CONFIG_ENDPOINT="https://<your-app-config-name>.azconfig.io"
@@ -80,6 +88,7 @@ We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/gpt-rag
 
 
 This project may contain trademarks or logos. Authorized use of Microsoft trademarks or logos must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Modified versions must not imply sponsorship or cause confusion. Third-party trademarks are subject to their own policies.
+
 
 
 
