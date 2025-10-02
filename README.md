@@ -25,13 +25,20 @@ Before deploying the web application, you must provision the infrastructure as d
 
 ## How to deploy the web app
 
-Clone this repository and then run:
+Initialize the template:
+```shell
+azd init -t azure/gpt-rag-ui 
+```
+> [!IMPORTANT]
+> Use the **same environment name** with `azd init` as in the infrastructure deployment to keep components consistent.
+
+Update env variables then deploy:
 ```shell
 azd env refresh
 azd deploy 
 ```
 > [!IMPORTANT]
-> When running `azd env refresh`, make sure to use the **same subscription**, **resource group**, and **environment name** that you used during the infrastructure deployment. This ensures consistency across components.
+> Run `azd env refresh` with the **same subscription** and **resource group** used in the infrastructure deployment.
 
 ## 🎨 Customization
 
@@ -49,5 +56,6 @@ azd deploy
 We appreciate contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on the Contributor License Agreement (CLA), code of conduct, and submitting pull requests.
 
 ## Trademarks
+
 
 This project may contain trademarks or logos. Authorized use of Microsoft trademarks or logos must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Modified versions must not imply sponsorship or cause confusion. Third-party trademarks are subject to their own policies.
