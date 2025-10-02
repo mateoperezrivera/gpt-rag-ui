@@ -42,21 +42,24 @@ azd deploy
 
 ## Deploying the app with a shell script
 
-You need to set the App Configuration endpoint and run the deploy script.
+To deploy using a script, first clone the repository, set the App Configuration endpoint, and then run the deployment script.
 
-#### Bash (Linux/macOS):
-
-```bash
-export APP_CONFIG_ENDPOINT="https://<your-app-config-name>.azconfig.io"
-./scripts/deploy.sh
-```
-
-#### PowerShell (Windows):
+#### PowerShell (Windows)
 
 ```powershell
+git clone https://github.com/Azure/gpt-rag-ui.git
 $env:APP_CONFIG_ENDPOINT = "https://<your-app-config-name>.azconfig.io"
+cd gpt-rag-ui
 .\scripts\deploy.ps1
 ```
+
+#### Bash (Linux/macOS)
+```bash
+git clone https://github.com/Azure/gpt-rag-ui.git
+export APP_CONFIG_ENDPOINT="https://<your-app-config-name>.azconfig.io"
+cd gpt-rag-ui
+./scripts/deploy.sh
+````
 
 ## 🎨 Customization
 
@@ -77,5 +80,6 @@ We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/gpt-rag
 
 
 This project may contain trademarks or logos. Authorized use of Microsoft trademarks or logos must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Modified versions must not imply sponsorship or cause confusion. Third-party trademarks are subject to their own policies.
+
 
 
