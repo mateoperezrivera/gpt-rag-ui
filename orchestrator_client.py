@@ -1,10 +1,25 @@
-import os
 import httpx
 import logging
 from typing import Optional
 from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
 from dependencies import get_config
 config = get_config()
+
+
+def _get_config_value(key: str, *, default=None, allow_none: bool = False):
+    try:
+        return config.get_value(key, default=default, allow_none=allow_none)
+    except Exception:
+        return default
+
+
+def _get_orchestrator_base_url() -> Optional[str]:
+    for key in ("ORCHESTRATOR_BASE_URL", "ORCHESTRATOR_APP_ENDPOINT"):
+        value = _get_config_value(key, default=None, allow_none=True)
+        if value:
+            return value.rstrip("/")
+    return None
+
 
 # Obtain an Azure AD token via Managed Identity or Azure CLI credentials
 def get_managed_identity_token():
@@ -18,15 +33,17 @@ def get_managed_identity_token():
 async def call_orchestrator_stream(conversation_id: str, question: str, auth_info: dict, question_id: str | None = None):    
     # Read Dapr settings and target app ID
     orchestrator_app_id = "orchestrator"
-    base_url = os.getenv("ORCHESTRATOR_BASE_URL")
+    base_url = _get_orchestrator_base_url()
     if base_url:
-        url = f"{base_url.rstrip('/')}/orchestrator"
+        url = f"{base_url}/orchestrator"
     else:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", "3500")
-        url = f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
+        dapr_port = _get_config_value("DAPR_HTTP_PORT", default="3500")
+        url = (
+            f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
+        )
 
     # Read the Dapr sidecar API token
-    dapr_token = os.getenv("DAPR_API_TOKEN")
+    dapr_token = _get_config_value("DAPR_API_TOKEN", default=None, allow_none=True)
     if not dapr_token:
         logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
@@ -37,9 +54,9 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
     if dapr_token:
         headers["dapr-api-token"] = dapr_token
 
-    api_key = config.get("ORCHESTRATOR_APP_APIKEY", "")
+    api_key = _get_config_value("ORCHESTRATOR_APP_APIKEY", default="")
     if api_key:
-        headers['X-API-KEY'] = api_key
+        headers["X-API-KEY"] = api_key
     
     # Construct request body
     payload = {
@@ -84,15 +101,17 @@ async def call_orchestrator_for_feedback(
         logging.warning("call_orchestrator_for_feedback called without question_id; feedback will have null question_id")
     # Read Dapr settings and target app ID
     orchestrator_app_id = "orchestrator"
-    base_url = os.getenv("ORCHESTRATOR_BASE_URL")
+    base_url = _get_orchestrator_base_url()
     if base_url:
-        url = f"{base_url.rstrip('/')}/orchestrator"
+        url = f"{base_url}/orchestrator"
     else:
-        dapr_port = os.getenv("DAPR_HTTP_PORT", "3500")
-        url = f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
+        dapr_port = _get_config_value("DAPR_HTTP_PORT", default="3500")
+        url = (
+            f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
+        )
 
     # Read the Dapr sidecar API token
-    dapr_token = os.getenv("DAPR_API_TOKEN")
+    dapr_token = _get_config_value("DAPR_API_TOKEN", default=None, allow_none=True)
     if not dapr_token:
         logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
@@ -103,9 +122,9 @@ async def call_orchestrator_for_feedback(
     if dapr_token:
         headers["dapr-api-token"] = dapr_token
 
-    api_key = config.get("ORCHESTRATOR_APP_APIKEY", "")
+    api_key = _get_config_value("ORCHESTRATOR_APP_APIKEY", default="")
     if api_key:
-        headers['X-API-KEY'] = api_key
+        headers["X-API-KEY"] = api_key
 
     payload = {
         "type": "feedback",
