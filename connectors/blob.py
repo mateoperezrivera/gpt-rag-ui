@@ -1,10 +1,11 @@
-from azure.storage.blob import ContainerClient, BlobServiceClient
+from azure.storage.blob import ContainerClient, BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
 from azure.core.exceptions import ResourceNotFoundError, AzureError
 from urllib.parse import urlparse, unquote
 import logging
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 class BlobClient:
     def __init__(self, blob_url, credential=None):
@@ -84,6 +85,47 @@ class BlobClient:
         except Exception as e:
             logging.error(f"[blob][{self.blob_name}] Failed to download blob: {e}")
             raise Exception(f"Blob client error when reading from blob storage: {e}")
+
+    def generate_sas_url(self, expiry: datetime = None, permissions: str = "r") -> str:
+        """
+        Generate a SAS URL for the blob using user delegation key (works with Managed Identity).
+        
+        :param expiry: Expiration datetime for the SAS token (default: 1 hour from now)
+        :param permissions: Permissions for the SAS token (default: 'r' for read)
+        :return: Full blob URL with SAS token
+        """
+        if expiry is None:
+            expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+        
+        start_time = datetime.now(timezone.utc) - timedelta(minutes=5)  # Start 5 min ago to avoid clock skew
+        
+        try:
+            # Get user delegation key (works with Managed Identity/AAD)
+            user_delegation_key = self.blob_service_client.get_user_delegation_key(
+                key_start_time=start_time,
+                key_expiry_time=expiry
+            )
+            
+            # Generate SAS token
+            sas_token = generate_blob_sas(
+                account_name=self.blob_service_client.account_name,
+                container_name=self.container_name,
+                blob_name=self.blob_name,
+                user_delegation_key=user_delegation_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=expiry,
+                start=start_time
+            )
+            
+            # Construct full URL with SAS
+            sas_url = f"{self.file_url}?{sas_token}"
+            logging.debug(f"[blob][{self.blob_name}] Generated SAS URL (expires: {expiry})")
+            return sas_url
+            
+        except Exception as e:
+            logging.error(f"[blob][{self.blob_name}] Failed to generate SAS URL: {e}")
+            # Fallback: return original URL (will only work if blob is public or client has auth)
+            return self.file_url
 
 class BlobContainerClient:
     def __init__(self, storage_account_base_url, container_name, credential=None):

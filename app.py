@@ -4,12 +4,14 @@ import uuid
 import logging
 import urllib.parse
 from typing import Optional, Set, Tuple
+from datetime import datetime, timedelta
 
 import chainlit as cl
 
 from orchestrator_client import call_orchestrator_stream
 from feedback import register_feedback_handlers,create_feedback_actions
 from dependencies import get_config
+from connectors import BlobClient
 
 from constants import APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME, UUID_REGEX, REFERENCE_REGEX, TERMINATE_TOKEN
 from telemetry import Telemetry
@@ -20,6 +22,7 @@ config = get_config()
 Telemetry.configure_monitoring(config, APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME)
 
 ENABLE_FEEDBACK = config.get("ENABLE_USER_FEEDBACK", False, bool)
+STORAGE_ACCOUNT_NAME = config.get("STORAGE_ACCOUNT_NAME", "", str)
 
 
 def _normalize_container_name(container: Optional[str]) -> str:
@@ -44,6 +47,33 @@ def extract_conversation_id_from_chunk(chunk: str) -> Tuple[Optional[str], str]:
         return conv_id, chunk[match.end():]
     return None, chunk
 
+def generate_blob_sas_url(container: str, blob_name: str, expiry_hours: int = 1) -> str:
+    """
+    Generate a time-limited SAS URL for direct blob download.
+    This bypasses Container Apps routing completely.
+    """
+    try:
+        blob_url = f"https://{STORAGE_ACCOUNT_NAME}.blob.core.windows.net/{container}/{blob_name}"
+        blob_client = BlobClient(blob_url=blob_url)
+        
+        # Generate SAS token with read permission
+        from datetime import datetime, timedelta, timezone
+        expiry = datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
+        
+        # Try to generate SAS URL (requires azure-storage-blob with SAS support)
+        try:
+            sas_url = blob_client.generate_sas_url(expiry=expiry, permissions="r")
+            logging.info(f"[app] Generated SAS URL for {container}/{blob_name} (expires in {expiry_hours}h)")
+            return sas_url
+        except AttributeError:
+            # Fallback: return direct blob URL (relies on public access or managed identity at client side)
+            logging.warning(f"[app] SAS generation not supported, using direct blob URL for {container}/{blob_name}")
+            return blob_url
+    except Exception as e:
+        logging.error(f"[app] Failed to generate blob URL for {container}/{blob_name}: {e}")
+        # Fallback to the old /api/download/ route as last resort
+        return f"/api/download/{container}/{blob_name}"
+
 def resolve_reference_href(raw_href: str) -> str:
     href = (raw_href or "").strip()
     if not href:
@@ -51,6 +81,9 @@ def resolve_reference_href(raw_href: str) -> str:
 
     split_href = urllib.parse.urlsplit(href)
     if split_href.scheme or split_href.netloc:
+        return href
+
+    if href.startswith("/api/download/") or href.startswith("api/download/"):
         return href
 
     path = urllib.parse.unquote(split_href.path.replace("\\", "/")).lstrip("/")
@@ -64,18 +97,29 @@ def resolve_reference_href(raw_href: str) -> str:
     elif not container and IMAGES_CONTAINER:
         container = IMAGES_CONTAINER
 
+    # Extract clean blob name
     if container:
         if path.startswith(f"{container}/"):
-            resolved_path = path
+            blob_name = path[len(container)+1:]
         elif path:
-            resolved_path = f"{container}/{path}"
+            blob_name = path
         else:
-            resolved_path = container
+            blob_name = ""
     else:
-        resolved_path = path
+        blob_name = path
 
-    encoded_path = urllib.parse.quote(resolved_path, safe="/~.-")
-    return f"/{encoded_path}{query}{fragment}"
+    if not blob_name:
+        return href
+
+    # Generate direct SAS URL to Azure Blob Storage (bypasses Container Apps completely)
+    sas_url = generate_blob_sas_url(container, blob_name)
+    
+    # Add original query and fragment if present
+    if query or fragment:
+        separator = "&" if "?" in sas_url else "?"
+        return f"{sas_url}{separator}{query.lstrip('?')}{fragment}"
+    
+    return sas_url
 
 
 def replace_source_reference_links(text: str, references: Optional[Set[str]] = None) -> str:
