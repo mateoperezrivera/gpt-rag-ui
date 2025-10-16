@@ -2,19 +2,27 @@ import logging
 import os
 from io import BytesIO
 
-from fastapi import Response
+from fastapi import Response, Request, FastAPI
 from fastapi.responses import StreamingResponse
-from chainlit.server import app as chainlit_app
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+# Configure logging FIRST
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s'
+)
 
 from connectors import BlobClient
 from connectors import AppConfigClient
-
 from dependencies import get_config
 
 # Load environment variables from Azure App Configuration
 config : AppConfigClient = get_config()
+logging.info("[main] Configuration loaded")
+
+# Import chainlit_app AFTER config is ready
+from chainlit.server import app as chainlit_app
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 def download_from_blob(file_name: str) -> bytes:
     logging.info("[chainlit_app] Downloading file: %s", file_name)
@@ -59,31 +67,41 @@ def handle_file_download(file_path: str):
 
 # TODO: Validate blob metadata_security_id to prevent unauthorized access.
 
-@chainlit_app.get(f"/{documents_container}/" + "{file_path:path}")
-def download_document(file_path: str):
-    return handle_file_download(f"{documents_container}/{file_path}")
+# Create a separate FastAPI app for blob downloads that will be mounted
+blob_download_app = FastAPI()
+logging.info("[main] Created blob_download_app FastAPI instance")
 
-@chainlit_app.get(f"/{images_container}/" + "{file_path:path}")
-def download_image(file_path: str):
-    return handle_file_download(f"{images_container}/{file_path}")
+@blob_download_app.get("/{container_name}/{file_path:path}")
+async def download_blob_file(container_name: str, file_path: str):
+    logging.info(f"[BLOB_DOWNLOAD_APP] Download request: container={container_name}, file={file_path}")
+    normalized = container_name.strip().strip("/")
+    target_container = None
+    if normalized == documents_container:
+        target_container = documents_container
+    elif normalized == images_container:
+        target_container = images_container
+    
+    if not target_container:
+        logging.warning(f"[BLOB_DOWNLOAD_APP] Unknown container: {container_name}")
+        return Response("Container not found", status_code=404, media_type="text/plain")
+    
+    return handle_file_download(f"{target_container}/{file_path}")
 
+logging.info("[main] Registered download_blob_file route on blob_download_app")
 
-# -----------------------------------
-# Ensure source routes are prioritized
-# -----------------------------------
+# Mount the blob download app BEFORE importing chainlit handlers
 try:
-    images_route = next(route for route in chainlit_app.router.routes if getattr(route, "path", "").startswith(f"/{documents_container}/"))
-    chainlit_app.router.routes.remove(images_route)
-    chainlit_app.router.routes.insert(0, images_route)
-    documents_route = next(route for route in chainlit_app.router.routes if getattr(route, "path", "").startswith(f"/{images_container}/"))
-    chainlit_app.router.routes.remove(documents_route)
-    chainlit_app.router.routes.insert(0, documents_route)
-    logging.info("[chainlit_app] Moved source routes to the top of the route list.")
-except StopIteration:
-    logging.warning("[chainlit_app] source route not found; skipping reorder.")
+    chainlit_app.mount("/api/download", blob_download_app)
+    logging.info("[main] ✅ Blob download app successfully mounted at /api/download")
+    logging.info(f"[main] Chainlit app routes after mount: {[r.path for r in chainlit_app.routes]}")
+except Exception as e:
+    logging.error(f"[main] ❌ Failed to mount blob_download_app: {e}")
+    raise
 
-# Import Chainlit event handlers (side-effect registration)
-import app
+# Import Chainlit event handlers
+import app as chainlit_handlers
+
+logging.info("[main] Chainlit handlers imported")
 
 # ASGI entry point
 app = chainlit_app
