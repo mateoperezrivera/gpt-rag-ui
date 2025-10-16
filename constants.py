@@ -10,12 +10,12 @@ UUID_REGEX = re.compile(
 )
 
 SUPPORTED_EXTENSIONS = [
-    "pdf", "bmp", "jpeg", "png", "tiff", "xlsx", "docx", "pptx",
+    "pdf", "bmp", "jpeg", "jpg", "png", "tiff", "xlsx", "docx", "pptx",
     "md", "txt", "html", "shtml", "htm", "py", "csv", "xml", "json", "vtt"
 ]
 
 REFERENCE_REGEX = re.compile(
-    r'\[([^\]]+\.(?:' + '|'.join(SUPPORTED_EXTENSIONS) + r'))\]',
+    r'\[([^\]]+)\]\(([^)]+\.(?:' + '|'.join(SUPPORTED_EXTENSIONS) + r'))\)',
     re.IGNORECASE
 )
 
