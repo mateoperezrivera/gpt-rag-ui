@@ -14,7 +14,7 @@ def _get_config_value(key: str, *, default=None, allow_none: bool = False):
 
 
 def _get_orchestrator_base_url() -> Optional[str]:
-    for key in ("ORCHESTRATOR_BASE_URL", "ORCHESTRATOR_APP_ENDPOINT"):
+    for key in ("ORCHESTRATOR_BASE_URL"):
         value = _get_config_value(key, default=None, allow_none=True)
         if value:
             return value.rstrip("/")
@@ -43,7 +43,7 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
         )
 
     # Read the Dapr sidecar API token
-    dapr_token = _get_config_value("DAPR_API_TOKEN", default=None, allow_none=True)
+    dapr_token = os.getenv("DAPR_API_TOKEN")
     if not dapr_token:
         logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
@@ -111,7 +111,7 @@ async def call_orchestrator_for_feedback(
         )
 
     # Read the Dapr sidecar API token
-    dapr_token = _get_config_value("DAPR_API_TOKEN", default=None, allow_none=True)
+    dapr_token = os.getenv("DAPR_API_TOKEN")
     if not dapr_token:
         logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
