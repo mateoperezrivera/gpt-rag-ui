@@ -1,8 +1,13 @@
-import httpx
+import os
 import logging
 from typing import Optional
+
+import httpx
 from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
+
 from dependencies import get_config
+
+logger = logging.getLogger("gpt_rag_ui.orchestrator_client")
 config = get_config()
 
 
@@ -10,14 +15,17 @@ def _get_config_value(key: str, *, default=None, allow_none: bool = False):
     try:
         return config.get_value(key, default=default, allow_none=allow_none)
     except Exception:
+        if allow_none or default is not None:
+            logger.debug("Configuration key '%s' not found; using default", key)
+        else:
+            logger.exception("Failed to read configuration value for key '%s'", key)
         return default
 
 
 def _get_orchestrator_base_url() -> Optional[str]:
-    for key in ("ORCHESTRATOR_BASE_URL"):
-        value = _get_config_value(key, default=None, allow_none=True)
-        if value:
-            return value.rstrip("/")
+    value = _get_config_value("ORCHESTRATOR_BASE_URL", default=None, allow_none=True)
+    if value:
+        return value.rstrip("/")
     return None
 
 
@@ -42,10 +50,12 @@ async def call_orchestrator_stream(conversation_id: str, question: str, auth_inf
             f"http://127.0.0.1:{dapr_port}/v1.0/invoke/{orchestrator_app_id}/method/orchestrator"
         )
 
-    # Read the Dapr sidecar API token
+    # Read the Dapr sidecar API token, favoring environment variables to avoid config churn
     dapr_token = os.getenv("DAPR_API_TOKEN")
+    if dapr_token is None:
+        dapr_token = _get_config_value("DAPR_API_TOKEN", default=None, allow_none=True)
     if not dapr_token:
-        logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
+        logger.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
     # Prepare headers: content-type and optional Dapr token
     headers = {
@@ -98,7 +108,7 @@ async def call_orchestrator_for_feedback(
         auth_info: dict,
     ) -> bool:
     if not question_id:
-        logging.warning("call_orchestrator_for_feedback called without question_id; feedback will have null question_id")
+        logger.warning("call_orchestrator_for_feedback called without question_id; feedback will have null question_id")
     # Read Dapr settings and target app ID
     orchestrator_app_id = "orchestrator"
     base_url = _get_orchestrator_base_url()
@@ -113,7 +123,7 @@ async def call_orchestrator_for_feedback(
     # Read the Dapr sidecar API token
     dapr_token = os.getenv("DAPR_API_TOKEN")
     if not dapr_token:
-        logging.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
+        logger.debug("DAPR_API_TOKEN is not set; proceeding without Dapr token header")
 
     # Prepare headers: content-type and optional Dapr token
     headers = {

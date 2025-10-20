@@ -17,6 +17,8 @@ from constants import APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME, UUID_REG
 from telemetry import Telemetry
 from opentelemetry.trace import SpanKind
 
+logger = logging.getLogger("gpt_rag_ui.app")
+
 config = get_config()
 
 Telemetry.configure_monitoring(config, APPLICATION_INSIGHTS_CONNECTION_STRING, APP_NAME)
@@ -43,7 +45,7 @@ def extract_conversation_id_from_chunk(chunk: str) -> Tuple[Optional[str], str]:
     match = UUID_REGEX.match(chunk)
     if match:
         conv_id = match.group(1)
-        logging.info("[app] Extracted Conversation ID: %s", conv_id)
+        logger.debug("Extracted conversation id %s from stream chunk", conv_id)
         return conv_id, chunk[match.end():]
     return None, chunk
 
@@ -55,6 +57,8 @@ def generate_blob_sas_url(container: str, blob_name: str, expiry_hours: int = 1)
     try:
         blob_url = f"https://{STORAGE_ACCOUNT_NAME}.blob.core.windows.net/{container}/{blob_name}"
         blob_client = BlobClient(blob_url=blob_url)
+        if not blob_client.exists():
+            raise FileNotFoundError(f"Blob '{container}/{blob_name}' not found")
         
         # Generate SAS token with read permission
         from datetime import datetime, timedelta, timezone
@@ -63,14 +67,26 @@ def generate_blob_sas_url(container: str, blob_name: str, expiry_hours: int = 1)
         # Try to generate SAS URL (requires azure-storage-blob with SAS support)
         try:
             sas_url = blob_client.generate_sas_url(expiry=expiry, permissions="r")
-            logging.info(f"[app] Generated SAS URL for {container}/{blob_name} (expires in {expiry_hours}h)")
+            logger.debug(
+                "Generated SAS URL for %s/%s (expires in %sh)",
+                container,
+                blob_name,
+                expiry_hours,
+            )
             return sas_url
         except AttributeError:
             # Fallback: return direct blob URL (relies on public access or managed identity at client side)
-            logging.warning(f"[app] SAS generation not supported, using direct blob URL for {container}/{blob_name}")
+            logger.warning(
+                "SAS generation not supported, using direct blob URL for %s/%s",
+                container,
+                blob_name,
+            )
             return blob_url
+    except FileNotFoundError as missing_blob:
+        logger.warning("Skipping SAS generation because blob is missing: %s", missing_blob)
+        raise
     except Exception as e:
-        logging.error(f"[app] Failed to generate blob URL for {container}/{blob_name}: {e}")
+        logger.exception("Failed to generate blob URL for %s/%s", container, blob_name)
         # Fallback to the old /api/download/ route as last resort
         return f"/api/download/{container}/{blob_name}"
 
@@ -112,25 +128,37 @@ def resolve_reference_href(raw_href: str) -> str:
         return href
 
     # Generate direct SAS URL to Azure Blob Storage (bypasses Container Apps completely)
-    sas_url = generate_blob_sas_url(container, blob_name)
+    try:
+        sas_url = generate_blob_sas_url(container, blob_name)
+    except FileNotFoundError:
+        logger.warning("Reference '%s' points to a missing blob %s/%s", raw_href, container, blob_name)
+        sas_url = None
+    except Exception:
+        logger.exception("Failed to build SAS URL for reference '%s'", raw_href)
+        sas_url = None
     
     # Add original query and fragment if present
-    if query or fragment:
+    if sas_url and (query or fragment):
         separator = "&" if "?" in sas_url else "?"
         return f"{sas_url}{separator}{query.lstrip('?')}{fragment}"
-    
-    return sas_url
+
+    return sas_url or href
 
 
 def replace_source_reference_links(text: str, references: Optional[Set[str]] = None) -> str:
     def replacer(match):
         display_text = match.group(1)
         raw_href = match.group(2)
+        # Resolve the original link into a signed blob URL when possible, otherwise drop it.
         resolved_href = resolve_reference_href(raw_href)
-        if references is not None:
-            references.add(resolved_href)
-        logging.debug("[app] Resolved reference '%s' -> '%s'", raw_href, resolved_href)
-        return f"[{display_text}]({resolved_href})"
+        if resolved_href:
+            if references is not None:
+                references.add(resolved_href)
+            logger.debug("Resolved reference '%s' -> '%s'", raw_href, resolved_href)
+            return f"[{display_text}]({resolved_href})"
+        # Returning an empty string avoids rendering broken links when the blob is missing.
+        logger.warning("Dropping reference '%s' because target URL could not be resolved", raw_href)
+        return ""
 
     return REFERENCE_REGEX.sub(replacer, text)
 
@@ -182,11 +210,22 @@ async def handle_message(message: cl.Message):
         conversation_id = cl.user_session.get("conversation_id") or ""
         response_msg = cl.Message(content="")
 
+        def _trim_for_log(value: str, limit: int = 400) -> str:
+            clean_value = (value or "").strip().replace("\n", " ")
+            if len(clean_value) > limit:
+                return f"{clean_value[:limit].rstrip()}..."
+            return clean_value
+
         app_user = cl.user_session.get("user")
         if app_user and not app_user.metadata.get('authorized', True):
             await response_msg.stream_token(
                 "Oops! It looks like you don’t have access to this service. "
                 "If you think you should, please reach out to your administrator for help."
+            )
+            logger.warning(
+                "Blocked unauthorized request: conversation=%s user=%s",
+                conversation_id or "new",
+                app_user.metadata.get('client_principal_id', 'unknown'),
             )
             return
         
@@ -194,13 +233,39 @@ async def handle_message(message: cl.Message):
         span.set_attribute('conversation_id', conversation_id)
         span.set_attribute('user_id', app_user.metadata.get('client_principal_id', 'no-auth') if app_user else 'anonymous')
 
+        principal = app_user.metadata.get('client_principal_name', 'anonymous') if app_user else 'anonymous'
+        logger.info(
+            "User request received: conversation=%s question_id=%s user=%s preview='%s'",
+            conversation_id or "new",
+            message.id,
+            principal,
+            _trim_for_log(message.content),
+        )
+
         await response_msg.stream_token(" ")
 
         buffer = ""
         full_text = ""
         references = set()
         auth_info = check_authorization()
+        logger.info(
+            "Forwarding request to orchestrator: conversation=%s question_id=%s user=%s authorized=%s groups=%d",
+            conversation_id or "new",
+            message.id,
+            principal,
+            auth_info.get("authorized"),
+            len(auth_info.get("client_group_names", [])),
+        )
+        logger.debug(
+            "Orchestrator payload preview: conversation=%s question_id=%s preview='%s'",
+            conversation_id or "new",
+            message.id,
+            _trim_for_log(message.content),
+        )
         generator = call_orchestrator_stream(conversation_id, message.content, auth_info, message.id)
+
+        chunk_count = 0
+        first_content_seen = False
 
         try:
             async for chunk in generator:
@@ -213,22 +278,48 @@ async def handle_message(message: cl.Message):
 
                 cleaned_chunk = cleaned_chunk.replace("\\n", "\n")
 
+                normalized_preview = cleaned_chunk.strip().lower()
+                if not first_content_seen and normalized_preview:
+                    if (
+                        normalized_preview.startswith("<!doctype")
+                        or normalized_preview.startswith("<html")
+                        or "<html" in normalized_preview[:120]
+                        or "azure container apps" in normalized_preview
+                    ):
+                        logger.error(
+                            "Received HTML payload from orchestrator: conversation=%s question_id=%s",
+                            conversation_id or "pending",
+                            message.id,
+                        )
+                        raise RuntimeError("orchestrator returned html placeholder")
+                    first_content_seen = True
+
                 # Track and rewrite references as blob download links
                 chunk_refs: Set[str] = set()
                 cleaned_chunk = replace_source_reference_links(cleaned_chunk, chunk_refs)
                 if chunk_refs:
                     references.update(chunk_refs)
-                    logging.info("[app] Found file references: %s", chunk_refs)
+                    logger.info(
+                        "Streaming response references detected: conversation=%s question_id=%s refs=%s",
+                        conversation_id or "pending",
+                        message.id,
+                        sorted(chunk_refs),
+                    )
 
                 buffer += cleaned_chunk
                 full_text += cleaned_chunk
+                chunk_count += 1
 
                 # Handle TERMINATE token
                 token_index = buffer.find(TERMINATE_TOKEN)
                 if token_index != -1:
                     if token_index > 0:
                         await response_msg.stream_token(buffer[:token_index])
-                    logging.info("[app] TERMINATE token detected. Draining remaining chunks...")
+                    logger.debug(
+                        "Terminate token detected, draining remaining orchestrator stream: conversation=%s question_id=%s",
+                        conversation_id or "pending",
+                        message.id,
+                    )
                     async for _ in generator:
                         pass  # drain
                     break
@@ -244,12 +335,19 @@ async def handle_message(message: cl.Message):
                     buffer = buffer[safe_flush_length:]
 
         except Exception as e:
-            error_message = (
-                "I'm sorry, I had a problem with the request. Please report the error. "
-                f"Details: {e}"
+            user_error_message = (
+                "We hit a technical issue while processing your request. "
+                "Please contact the application support team and share reference "
+                f"{message.id}."
             )
-            logging.exception("[app] Error during message handling.")
-            await response_msg.stream_token(error_message)
+            logger.exception(
+                "Failed while processing orchestrator response: conversation=%s question_id=%s",
+                conversation_id or "pending",
+                message.id,
+            )
+            full_text = user_error_message
+            buffer = ""
+            await response_msg.stream_token(user_error_message)
 
         finally:
             try:
@@ -259,6 +357,13 @@ async def handle_message(message: cl.Message):
                     raise
 
         cl.user_session.set("conversation_id", conversation_id)
+        if references:
+            logger.info(
+                "Aggregated response references: conversation=%s question_id=%s refs=%s",
+                conversation_id,
+                message.id,
+                sorted(references),
+            )
         if ENABLE_FEEDBACK:
             response_msg.actions = create_feedback_actions(
                 message.id, conversation_id, message.content
@@ -268,3 +373,12 @@ async def handle_message(message: cl.Message):
         )
         response_msg.content = final_text
         await response_msg.update()
+
+        logger.info(
+            "Response delivered: conversation=%s question_id=%s chunks=%s characters=%s preview='%s'",
+            conversation_id,
+            message.id,
+            chunk_count,
+            len(final_text),
+            _trim_for_log(final_text),
+        )

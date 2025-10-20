@@ -86,6 +86,22 @@ class BlobClient:
             logging.error(f"[blob][{self.blob_name}] Failed to download blob: {e}")
             raise Exception(f"Blob client error when reading from blob storage: {e}")
 
+    def exists(self) -> bool:
+        """Check whether the target blob exists."""
+        blob_client = self.blob_service_client.get_blob_client(
+            container=self.container_name,
+            blob=self.blob_name,
+        )
+        try:
+            blob_client.get_blob_properties()
+            return True
+        except ResourceNotFoundError:
+            logging.debug(f"[blob][{self.blob_name}] Blob not found during existence check.")
+            return False
+        except AzureError as exc:
+            logging.error(f"[blob][{self.blob_name}] Failed to verify blob existence: {exc}")
+            raise
+
     def generate_sas_url(self, expiry: datetime = None, permissions: str = "r") -> str:
         """
         Generate a SAS URL for the blob using user delegation key (works with Managed Identity).
