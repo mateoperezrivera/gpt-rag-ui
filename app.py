@@ -188,6 +188,7 @@ async def handle_message(message: cl.Message):
                 "Oops! It looks like you don’t have access to this service. "
                 "If you think you should, please reach out to your administrator for help."
             )
+            await response_msg.send()
             return
         
         span.set_attribute('question_id', message.id)
@@ -248,9 +249,10 @@ async def handle_message(message: cl.Message):
                 "I'm sorry, I had a problem with the request. Please report the error. "
                 f"Details: {e}"
             )
-            logging.exception("[app] Error during message handling.")
-            await response_msg.stream_token(error_message)
-
+            logging.exception(f"[app] Error during message handling.{e}")
+            await response_msg.stream_token(error_message)           
+            await response_msg.send()
+            return
         finally:
             try:
                 await generator.aclose()
@@ -267,4 +269,26 @@ async def handle_message(message: cl.Message):
             full_text.replace(TERMINATE_TOKEN, ""), references
         )
         response_msg.content = final_text
-        await response_msg.update()
+        await response_msg.send()
+
+@cl.data_layer
+def get_data_layer():
+    try:
+        from data_layer import CosmosDBDataLayer
+    except ModuleNotFoundError:
+        # Fallback: import by file path when running as top-level script or in non-package context
+        import importlib.util
+        import pathlib
+
+        data_layer_path = pathlib.Path(__file__).parent / "data_layer.py"
+        spec = importlib.util.spec_from_file_location("data_layer", str(data_layer_path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore
+        CosmosDBDataLayer = getattr(module, "CosmosDBDataLayer")
+
+    datalayer = CosmosDBDataLayer(
+        "cosmos-dbwrbdken34r274",
+        "chainlit",
+        account_endpoint="https://cosmos-wrbdken34r274.documents.azure.com:443/",
+    )
+    return datalayer
