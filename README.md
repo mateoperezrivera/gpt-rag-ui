@@ -19,9 +19,26 @@ Part of the [GPT-RAG](https://github.com/Azure/gpt-rag) solution.
 
 This repo provides a user interface built with [Chainlit](https://www.chainlit.io/) to interact with GPT-powered retrieval-augmented generation systems. It is designed to work seamlessly with the Orchestrator backend and supports customization and theming.
 
+## Documentation
+
+For comprehensive information about GPT-RAG, including architecture details, configuration guides, best practices, troubleshooting resources, deployment guidance, customization options, and advanced usage scenarios, please refer to the [official project documentation](https://azure.github.io/GPT-RAG/).
+
 ## Prerequisites
 
-Before deploying the application, you must provision the infrastructure as described in the [GPT-RAG](https://github.com/azure/gpt-rag) repo. This includes creating all necessary Azure resources required to support the application runtime.
+Provision the infrastructure first by following the GPT-RAG repository instructions [GPT-RAG](https://github.com/azure/gpt-rag). This ensures all required Azure resources (e.g., Container App, Storage, AI Search) are in place before deploying the web application.
+
+<details markdown="block">
+<summary>Click to view <strong>software</strong> prerequisites</summary>
+<br>
+The machine used to customize and or deploy the service should have:
+
+* Azure CLI: [Install Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
+* Azure Developer CLI (optional, if using azd): [Install azd](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd)
+* Git: [Download Git](https://git-scm.com/downloads)
+* Python 3.12: [Download Python 3.12](https://www.python.org/downloads/release/python-3120/)
+* Docker CLI: [Install Docker](https://docs.docker.com/get-docker/)
+* VS Code (recommended): [Download VS Code](https://code.visualstudio.com/download)
+</details>
 
 ## Deployment steps
 
@@ -74,6 +91,10 @@ cd gpt-rag-ui
 - Modify theme in `public/theme.json`
 - Customize layout with `public/custom.css`
 - Adjust app behavior in `.chainlit/config.toml`
+
+## Found an Issue?
+
+Encountered an error or bug? Help us improve the quality of this accelerator by reporting issues or suggesting enhancements on our [GitHub Issues page](https://github.com/Azure/GPT-RAG/issues). Your feedback helps make GPT-RAG better for everyone!
 
 ## Previous Releases
 

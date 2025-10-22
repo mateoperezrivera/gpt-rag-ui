@@ -11,13 +11,19 @@ logging.basicConfig(
     format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s'
 )
 
+# Reduce noise from chatty Azure SDK loggers so troubleshooting signals stand out.
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+
+logger = logging.getLogger("gpt_rag_ui.main")
+
 from connectors import BlobClient
 from connectors import AppConfigClient
 from dependencies import get_config
 
 # Load environment variables from Azure App Configuration
 config : AppConfigClient = get_config()
-logging.info("[main] Configuration loaded")
+logger.info("Configuration loaded from Azure App Configuration")
 
 # Import chainlit_app AFTER config is ready
 from chainlit.server import app as chainlit_app
@@ -25,18 +31,18 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 def download_from_blob(file_name: str) -> bytes:
-    logging.info("[chainlit_app] Downloading file: %s", file_name)
+    logger.info("Preparing blob download for '%s'", file_name)
 
     blob_url = f"https://{account_name}.blob.core.windows.net/{file_name}"
-    logging.debug(f"[chainlit_app] Constructed blob URL: {blob_url}")
+    logger.debug("Constructed blob URL %s", blob_url)
     
     try:
         blob_client = BlobClient(blob_url=blob_url)
         blob_data = blob_client.download_blob()
-        logging.debug(f"[chainlit_app] Successfully downloaded blob data: {file_name}")
+        logger.debug("Successfully downloaded blob data for '%s'", file_name)
         return blob_data
     except Exception as e:
-        logging.error(f"[chainlit_app] Error downloading blob {file_name}: {e}")
+        logger.exception("Error downloading blob '%s'", file_name)
         raise
 
 account_name = config.get("STORAGE_ACCOUNT_NAME")
@@ -51,7 +57,7 @@ def handle_file_download(file_path: str):
     except Exception as e:
         error_message = str(e)
         status_code = 404 if "BlobNotFound" in error_message else 500
-        logging.exception(f"[chainlit_app] Download error: {error_message}")
+        logger.exception("Download error for '%s'", file_path)
         return Response(
             f"{'Blob not found' if status_code == 404 else 'Internal server error'}: {error_message}.",
             status_code=status_code,
@@ -69,11 +75,11 @@ def handle_file_download(file_path: str):
 
 # Create a separate FastAPI app for blob downloads that will be mounted
 blob_download_app = FastAPI()
-logging.info("[main] Created blob_download_app FastAPI instance")
+logger.info("Created FastAPI sub-application for blob downloads")
 
 @blob_download_app.get("/{container_name}/{file_path:path}")
 async def download_blob_file(container_name: str, file_path: str):
-    logging.info(f"[BLOB_DOWNLOAD_APP] Download request: container={container_name}, file={file_path}")
+    logger.info("Download request received: container=%s file=%s", container_name, file_path)
     normalized = container_name.strip().strip("/")
     target_container = None
     if normalized == documents_container:
@@ -82,26 +88,26 @@ async def download_blob_file(container_name: str, file_path: str):
         target_container = images_container
     
     if not target_container:
-        logging.warning(f"[BLOB_DOWNLOAD_APP] Unknown container: {container_name}")
+        logger.warning("Rejected download for unknown container '%s'", container_name)
         return Response("Container not found", status_code=404, media_type="text/plain")
     
     return handle_file_download(f"{target_container}/{file_path}")
 
-logging.info("[main] Registered download_blob_file route on blob_download_app")
+logger.debug("Registered download_blob_file route on blob_download_app")
 
 # Mount the blob download app BEFORE importing chainlit handlers
 try:
     chainlit_app.mount("/api/download", blob_download_app)
-    logging.info("[main] ✅ Blob download app successfully mounted at /api/download")
-    logging.info(f"[main] Chainlit app routes after mount: {[r.path for r in chainlit_app.routes]}")
+    logger.info("Mounted blob download app at /api/download")
+    logger.debug("Chainlit routes post-mount: %s", [r.path for r in chainlit_app.routes])
 except Exception as e:
-    logging.error(f"[main] ❌ Failed to mount blob_download_app: {e}")
+    logger.exception("Failed to mount blob_download_app")
     raise
 
 # Import Chainlit event handlers
 import app as chainlit_handlers
 
-logging.info("[main] Chainlit handlers imported")
+logger.info("Chainlit handlers imported")
 
 # ASGI entry point
 app = chainlit_app
@@ -128,7 +134,7 @@ def _safe_openapi():
         )
     except Exception as exc:
         # Log the original exception and return a tiny fallback openapi schema so /docs and /openapi.json don't 500
-        logging.exception("OpenAPI generation failed; returning fallback schema: %s", exc)
+        logger.exception("OpenAPI generation failed; returning fallback schema")
         chainlit_app.openapi_schema = {
             "openapi": "3.0.0",
             "info": {"title": chainlit_app.title, "version": chainlit_app.version},

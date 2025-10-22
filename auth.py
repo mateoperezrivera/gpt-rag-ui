@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Dict, List
 
 import httpx
@@ -7,6 +6,8 @@ import msal
 import chainlit as cl
 
 from dependencies import get_config
+
+logger = logging.getLogger("gpt_rag_ui.auth")
 
 config = get_config()
 
@@ -20,7 +21,7 @@ def get_env_var(name: str, fallback: str = None) -> str:
     """Helper to fetch and log missing environment variables."""
     value = config.get(name, fallback)
     if value is None:
-        logging.warning(f"[auth] Environment variable '{name}' is not set.")
+        logger.warning("Environment variable '%s' is not set", name)
     return value
 
 
@@ -35,10 +36,10 @@ async def get_user_groups(access_token: str) -> List[str]:
             response.raise_for_status()
             group_data = response.json()
         groups = [g.get("displayName", "unknown-group") for g in group_data.get("value", [])]
-        logging.info(f"[auth] User groups: {groups}")
+        logger.debug("Resolved %d group memberships", len(groups))
         return groups
     except Exception as e:
-        logging.warning(f"[auth] Failed to retrieve groups: {e}")
+        logger.warning("Failed to retrieve groups from Graph API: %s", e)
         return []
 
 
@@ -57,7 +58,11 @@ def is_user_authorized(name: str, principal_id: str, groups: List[str]) -> bool:
     if any(group in allowed_groups for group in groups):
         return True
 
-    logging.info(f"[auth] Access denied for user {name}. Not in allowed users or groups.")
+    logger.warning(
+        "Access denied for principal '%s' (%s). No matching allow list entry.",
+        name,
+        principal_id,
+    )
     return False
 
 
@@ -66,6 +71,7 @@ async def oauth_callback(
     provider_id: str, code: str, raw_user_data: Dict[str, str], default_user: cl.User
 ) -> cl.User:
     """Handles the OAuth callback and returns a validated Chainlit User."""
+    logger.info("OAuth callback received for provider '%s'", provider_id)
     client_id = get_env_var("OAUTH_AZURE_AD_CLIENT_ID", get_env_var("CLIENT_ID"))
     client_secret = get_env_var("OAUTH_AZURE_AD_CLIENT_SECRET")
     tenant_id = get_env_var("OAUTH_AZURE_AD_TENANT_ID")
@@ -86,6 +92,7 @@ async def oauth_callback(
 
     if "error" in result:
         error_desc = result.get("error_description", "Unknown error")
+        logger.error("Token acquisition failed: %s", error_desc)
         raise Exception(f"Token acquisition failed: {error_desc}")
 
     access_token = result.get("access_token")
@@ -99,6 +106,14 @@ async def oauth_callback(
     # Fetch user groups
     groups = await get_user_groups(access_token) if access_token else []
     authorized = is_user_authorized(principal_name, user_id, groups)
+
+    logger.info(
+        "User authenticated: name='%s' principal='%s' authorized=%s groups=%d",
+        user_name,
+        principal_name or user_id,
+        authorized,
+        len(groups),
+    )
 
     return cl.User(
         identifier=user_name,

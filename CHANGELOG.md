@@ -3,9 +3,11 @@
 All notable changes to this project will be documented in this file.  
 This format follows [Keep a Changelog](https://keepachangelog.com/) and adheres to [Semantic Versioning](https://semver.org/).
 
-## [v2.1.1] – 2025-10-16
-### Fixd
-- Citation links opens up new chat windows instead of rendering files. [#387](https://github.com/Azure/GPT-RAG/issues/387) 
+## [v2.1.1] – 2025-10-21
+### Added
+- Added more troubleshooting logs.
+### Fixed
+- Citations [387](https://github.com/Azure/GPT-RAG/issues/387)
 
 ## [v2.1.0] – 2025-08-31
 ### Added
