@@ -1,7 +1,7 @@
 from azure.storage.blob import ContainerClient, BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from azure.identity import ManagedIdentityCredential, AzureCliCredential, ChainedTokenCredential
 from azure.core.exceptions import ResourceNotFoundError, AzureError
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
 import logging
 import os
 import time
@@ -133,15 +133,18 @@ class BlobClient:
                 start=start_time
             )
             
-            # Construct full URL with SAS
-            sas_url = f"{self.file_url}?{sas_token}"
+            # Construct full URL with SAS - properly URL-encode the blob name
+            # The blob_name is already unquoted from the constructor, so we need to re-encode it
+            encoded_blob_name = quote(self.blob_name, safe='/')
+            sas_url = f"{self.account_url}/{self.container_name}/{encoded_blob_name}?{sas_token}"
             logging.debug(f"[blob][{self.blob_name}] Generated SAS URL (expires: {expiry})")
             return sas_url
             
         except Exception as e:
             logging.error(f"[blob][{self.blob_name}] Failed to generate SAS URL: {e}")
-            # Fallback: return original URL (will only work if blob is public or client has auth)
-            return self.file_url
+            # Fallback: return properly encoded URL (will only work if blob is public or client has auth)
+            encoded_blob_name = quote(self.blob_name, safe='/')
+            return f"{self.account_url}/{self.container_name}/{encoded_blob_name}"
 
 class BlobContainerClient:
     def __init__(self, storage_account_base_url, container_name, credential=None):

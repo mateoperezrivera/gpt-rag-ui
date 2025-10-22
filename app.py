@@ -53,11 +53,13 @@ def generate_blob_sas_url(container: str, blob_name: str, expiry_hours: int = 1)
     """
     Generate a time-limited SAS URL for direct blob download.
     This bypasses Container Apps routing completely.
+    Raises FileNotFoundError if the blob does not exist.
     """
     try:
         blob_url = f"https://{STORAGE_ACCOUNT_NAME}.blob.core.windows.net/{container}/{blob_name}"
         blob_client = BlobClient(blob_url=blob_url)
         if not blob_client.exists():
+            logger.info("Blob not found: %s/%s - reference will be omitted", container, blob_name)
             raise FileNotFoundError(f"Blob '{container}/{blob_name}' not found")
         
         # Generate SAS token with read permission
@@ -82,18 +84,20 @@ def generate_blob_sas_url(container: str, blob_name: str, expiry_hours: int = 1)
                 blob_name,
             )
             return blob_url
-    except FileNotFoundError as missing_blob:
-        logger.warning("Skipping SAS generation because blob is missing: %s", missing_blob)
+    except FileNotFoundError:
+        # Re-raise FileNotFoundError so the caller can handle it
         raise
     except Exception as e:
         logger.exception("Failed to generate blob URL for %s/%s", container, blob_name)
-        # Fallback to the old /api/download/ route as last resort
-        return f"/api/download/{container}/{blob_name}"
+        raise
 
-def resolve_reference_href(raw_href: str) -> str:
+def resolve_reference_href(raw_href: str) -> Optional[str]:
+    """
+    Resolve a reference href to a SAS URL. Returns None if the blob doesn't exist.
+    """
     href = (raw_href or "").strip()
     if not href:
-        return href
+        return None
 
     split_href = urllib.parse.urlsplit(href)
     if split_href.scheme or split_href.netloc:
@@ -125,27 +129,30 @@ def resolve_reference_href(raw_href: str) -> str:
         blob_name = path
 
     if not blob_name:
-        return href
+        return None
 
     # Generate direct SAS URL to Azure Blob Storage (bypasses Container Apps completely)
     try:
         sas_url = generate_blob_sas_url(container, blob_name)
     except FileNotFoundError:
-        logger.warning("Reference '%s' points to a missing blob %s/%s", raw_href, container, blob_name)
-        sas_url = None
+        logger.info("Reference '%s' points to missing blob %s/%s - omitting from output", raw_href, container, blob_name)
+        return None
     except Exception:
-        logger.exception("Failed to build SAS URL for reference '%s'", raw_href)
-        sas_url = None
+        logger.warning("Failed to build SAS URL for reference '%s' - omitting from output", raw_href)
+        return None
     
     # Add original query and fragment if present
     if sas_url and (query or fragment):
         separator = "&" if "?" in sas_url else "?"
         return f"{sas_url}{separator}{query.lstrip('?')}{fragment}"
 
-    return sas_url or href
+    return sas_url
 
 
 def replace_source_reference_links(text: str, references: Optional[Set[str]] = None) -> str:
+    """
+    Replace source reference links in text. Links that point to non-existent blobs are completely removed.
+    """
     def replacer(match):
         display_text = match.group(1)
         raw_href = match.group(2)
@@ -156,8 +163,8 @@ def replace_source_reference_links(text: str, references: Optional[Set[str]] = N
                 references.add(resolved_href)
             logger.debug("Resolved reference '%s' -> '%s'", raw_href, resolved_href)
             return f"[{display_text}]({resolved_href})"
-        # Returning an empty string avoids rendering broken links when the blob is missing.
-        logger.warning("Dropping reference '%s' because target URL could not be resolved", raw_href)
+        # Returning an empty string removes the reference completely when the blob is missing
+        logger.debug("Omitting reference '[%s](%s)' - target not found", display_text, raw_href)
         return ""
 
     return REFERENCE_REGEX.sub(replacer, text)
