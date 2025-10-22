@@ -40,15 +40,51 @@ The machine used to customize and or deploy the service should have:
 * VS Code (recommended): [Download VS Code](https://code.visualstudio.com/download)
 </details>
 
-## How to deploy the web app
+## Deployment steps
 
-Clone this repository and then run:
+Make sure you're logged in to Azure before anything else:
+
+```bash
+az login
+```
+
+### Deploying the app with azd (recommended)
+
+Initialize the template:
+```shell
+azd init -t azure/gpt-rag-ui 
+```
+> [!IMPORTANT]
+> Use the **same environment name** with `azd init` as in the infrastructure deployment to keep components consistent.
+
+Update env variables then deploy:
 ```shell
 azd env refresh
 azd deploy 
 ```
 > [!IMPORTANT]
-> When running `azd env refresh`, make sure to use the **same subscription**, **resource group**, and **environment name** that you used during the infrastructure deployment. This ensures consistency across components.
+> Run `azd env refresh` with the **same subscription** and **resource group** used in the infrastructure deployment.
+
+### Deploying the app with a shell script
+
+To deploy using a script, first clone the repository, set the App Configuration endpoint, and then run the deployment script.
+
+##### PowerShell (Windows)
+
+```powershell
+git clone https://github.com/Azure/gpt-rag-ui.git
+$env:APP_CONFIG_ENDPOINT = "https://<your-app-config-name>.azconfig.io"
+cd gpt-rag-ui
+.\scripts\deploy.ps1
+```
+
+##### Bash (Linux/macOS)
+```bash
+git clone https://github.com/Azure/gpt-rag-ui.git
+export APP_CONFIG_ENDPOINT="https://<your-app-config-name>.azconfig.io"
+cd gpt-rag-ui
+./scripts/deploy.sh
+````
 
 ## 🎨 Customization
 
@@ -67,8 +103,13 @@ Encountered an error or bug? Help us improve the quality of this accelerator by 
 
 ## 🤝 Contributing
 
-We appreciate contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on the Contributor License Agreement (CLA), code of conduct, and submitting pull requests.
+We appreciate contributions! See [CONTRIBUTING](https://github.com/Azure/gpt-rag/blob/main/CONTRIBUTING.md) for guidelines on submitting pull requests.
 
 ## Trademarks
 
+
 This project may contain trademarks or logos. Authorized use of Microsoft trademarks or logos must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Modified versions must not imply sponsorship or cause confusion. Third-party trademarks are subject to their own policies.
+
+
+
+
