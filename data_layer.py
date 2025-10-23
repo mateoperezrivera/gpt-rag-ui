@@ -9,15 +9,10 @@ import aiohttp
 from azure.cosmos.aio import CosmosClient
 from azure.cosmos import PartitionKey, exceptions
 from azure.identity.aio import DefaultAzureCredential
-from azure.identity import DefaultAzureCredential as SyncDefaultAzureCredential
 from chainlit.context import context
 from chainlit.data.base import BaseDataLayer
 from chainlit.data.storage_clients.base import BaseStorageClient
 from chainlit.data.utils import queue_until_user_message
-from azure.cosmos import CosmosClient as SyncCosmosClient
-import json
-import base64
-
 import asyncio
 
 if TYPE_CHECKING:
@@ -50,36 +45,45 @@ logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(
     logging.ERROR
 )
 
+import chainlit as cl
+
+
+@cl.data_layer
+def get_data_layer():
+    """Initialize and return the Cosmos DB data layer.
+    
+    Requires ENABLE_CHAT_HISTORY, DATABASE_NAME, and COSMOS_DB_ENDPOINT config values.
+    """
+    return CosmosDBDataLayer(
+        database_name=get_config().get("DATABASE_NAME"),
+        container_name="chainlit",
+        account_endpoint=get_config().get("COSMOS_DB_ENDPOINT"),
+    )
+
 
 class CosmosDBDataLayer(BaseDataLayer):
     def __init__(
         self,
         database_name: str,
         container_name: str,
-        connection_string: str | None = None,
         account_endpoint: str | None = None,
-        account_key: str | None = None,
-        use_msi: bool = False,
         storage_provider: BaseStorageClient | None = None,
         user_thread_limit: int = 10,
     ):
         """
-        Initialize the Cosmos DB data layer.
+        Initialize the Cosmos DB data layer with identity-based authentication.
 
         Args:
             database_name: The name of the Cosmos DB database
             container_name: The name of the container to use
-            connection_string: A connection string for Cosmos DB (alternative to account_endpoint/key)
             account_endpoint: The Cosmos DB account endpoint (URL)
-            account_key: The Cosmos DB account key
-            use_msi: Whether to use Managed Identity for authentication
             storage_provider: Optional storage provider for larger content
             user_thread_limit: Maximum number of threads to return per user
         """
         credential = DefaultAzureCredential()
-        account_endpoint = account_endpoint or os.environ.get("COSMOSDB_ENDPOINT")
+        account_endpoint = account_endpoint
         if not account_endpoint:
-            raise ValueError("Account endpoint must be provided when using MSI")
+            raise ValueError("Account endpoint must be provided")
         self.client = CosmosClient(account_endpoint, credential=credential)
 
         self.database_name = database_name
@@ -96,125 +100,6 @@ class CosmosDBDataLayer(BaseDataLayer):
         self.user_container = self.database.get_container_client(
             f"{self.container_name}_users"
         )
-        self.connection_string = connection_string
-        self.use_msi = use_msi
-
-    THREAD_ITEMS_CONTAINER_INDEXING_POLICY = {
-        "indexingMode": "consistent",
-        "automatic": True,  # Let CosmosDB handle the root path
-        "includedPaths": [
-            {
-                "path": "/data_type/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-            {
-                "path": "/threadId/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-            {
-                "path": "/createdAt/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-        ],
-        "excludedPaths": [{"path": "/*"}],
-        "compositeIndexes": [
-            [
-                {"path": "/threadId", "order": "ascending"},
-                {"path": "/data_type", "order": "ascending"},
-            ],
-            [
-                {"path": "/threadId", "order": "ascending"},
-                {"path": "/createdAt", "order": "ascending"},
-            ],
-        ],
-    }
-    THREAD_LIST_CONTAINER_INDEXING_POLICY = {
-        "indexingMode": "consistent",
-        "automatic": True,
-        "includedPaths": [
-            {
-                "path": "/userId/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-            {
-                "path": "/createdAt/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-            {
-                "path": "/name/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-        ],
-        "excludedPaths": [{"path": "/*"}],
-        "compositeIndexes": [
-            [
-                {"path": "/userId", "order": "ascending"},
-                {"path": "/createdAt", "order": "descending"},
-            ],
-        ],
-    }
-    USER_CONTAINER_INDEXING_POLICY = {
-        "indexingMode": "consistent",
-        "automatic": True,
-        "includedPaths": [
-            {
-                "path": "/identifier/?",
-                "indexes": [{"kind": "Range", "dataType": "String"}],
-            },
-        ],
-        "excludedPaths": [
-            {"path": "/*"}  # Exclude paths not explicitly included
-        ],
-    }
-
-    def _init_database_and_container(self):
-        """Initialize the database and containers if they don't exist"""
-        sync_credential = SyncDefaultAzureCredential()
-        principal_info = get_principal_info()
-        print("Current Azure Identity:", principal_info)
-        account_endpoint = os.environ.get("COSMOS_DB_ENDPOINT")
-        if not account_endpoint:
-            raise ValueError("Account endpoint must be provided when using MSI")
-        sync_client = SyncCosmosClient(account_endpoint, credential=sync_credential)
-
-        # Use synchronous operations
-        database = sync_client.get_database_client(self.database_name)
-
-        try:
-            # Create thread items container (threads, steps, elements)
-            database.create_container(
-                id=f"{self.container_name}_items",
-                partition_key=PartitionKey(path="/threadId"),
-                indexing_policy=self.THREAD_ITEMS_CONTAINER_INDEXING_POLICY,
-            )
-        except exceptions.CosmosResourceExistsError:
-            logging.warning(
-                f"CosmosDB: Container {self.container_name}_items already exists. Skipping creation."
-            )
-
-        try:
-            # Create thread list container (optimized for listing user threads)
-            database.create_container(
-                id=f"{self.container_name}_thread_list",
-                partition_key=PartitionKey(path="/userId"),
-                indexing_policy=self.THREAD_LIST_CONTAINER_INDEXING_POLICY,
-            )
-        except exceptions.CosmosResourceExistsError:
-            logging.warning(
-                f"CosmosDB: Container {self.container_name}_thread_list already exists. Skipping creation."
-            )
-
-        try:
-            # Create user container
-            database.create_container(
-                id=f"{self.container_name}_users",
-                partition_key=PartitionKey(path="/id"),
-                indexing_policy=self.USER_CONTAINER_INDEXING_POLICY,
-            )
-        except exceptions.CosmosResourceExistsError:
-            logging.warning(
-                f"CosmosDB: Container {self.container_name}_users already exists. Skipping creation."
-            )
 
     def _get_current_timestamp(self) -> str:
         return datetime.now().isoformat() + "Z"
@@ -271,32 +156,23 @@ class CosmosDBDataLayer(BaseDataLayer):
         thread_id = thread_id.strip("THREAD#")
         step_id = step_id.strip("STEP#")
 
-        parameters = [
-            {"name": "@data_type", "value": "STEP"},
-            {"name": "@step_id", "value": step_id},
-        ]
-        query = """
-        SELECT * FROM c 
-        WHERE c.data_type = @data_type 
-        AND c.id = @step_id
-        """
-
-        steps = [
-            step
-            async for step in self.threads_container.query_items(
-                query=query, partition_key=thread_id, parameters=parameters
+        try:
+            # Use point read which is faster than query
+            step = await self.threads_container.read_item(
+                item=step_id, partition_key=thread_id
             )
-        ]
-
-        if not steps:
+            
+            # Verify it's a step
+            if step.get("data_type") != "STEP":
+                return False
+                
+            if "feedback" in step:
+                del step["feedback"]
+                await self.threads_container.replace_item(item=step["id"], body=step)
+                return True
             return False
-
-        step = steps[0]
-        if "feedback" in step:
-            del step["feedback"]
-            await self.threads_container.replace_item(item=step["id"], body=step)
-
-        return True
+        except exceptions.CosmosResourceNotFoundError:
+            return False
 
     async def upsert_feedback(self, feedback: Feedback) -> str:
         if not feedback.forId:
@@ -304,26 +180,18 @@ class CosmosDBDataLayer(BaseDataLayer):
                 "CosmosDB data layer expects value for feedback.threadId got None"
             )
 
-        parameters = [
-            {"name": "@data_type", "value": "STEP"},
-            {"name": "@for_id", "value": feedback.forId},
-        ]
-        query = """
-        SELECT * FROM c 
-        WHERE c.data_type = @data_type 
-        AND c.id = @for_id
-        """
-        steps = [
-            step
-            async for step in self.threads_container.query_items(
-                query=query, partition_key=feedback.threadId, parameters=parameters
+        try:
+            # Use point read which is faster than query
+            step = await self.threads_container.read_item(
+                item=feedback.forId, partition_key=feedback.threadId
             )
-        ]
-
-        if not steps:
+            
+            # Verify it's a step
+            if step.get("data_type") != "STEP":
+                raise ValueError(f"Item is not a step: {feedback.forId}")
+        except exceptions.CosmosResourceNotFoundError:
             raise ValueError(f"Step not found for feedback: {feedback.forId}")
 
-        step = steps[0]
         feedback.id = f"THREAD#{feedback.threadId}::STEP#{feedback.forId}"
         step["feedback"] = asdict(feedback)
         await self.threads_container.replace_item(item=step["id"], body=step)
@@ -397,27 +265,18 @@ class CosmosDBDataLayer(BaseDataLayer):
     async def get_element(
         self, thread_id: str, element_id: str
     ) -> Optional["ElementDict"]:
-        parameters = [
-            {"name": "@data_type", "value": "ELEMENT"},
-            {"name": "@element_id", "value": element_id},
-        ]
-        query = """
-        SELECT * FROM c 
-        WHERE c.data_type = @data_type
-        AND c.id = @element_id
-        """
-
-        elements = [
-            element
-            async for element in self.threads_container.query_items(
-                query=query, partition_key=thread_id, parameters=parameters
+        try:
+            # Use point read which is faster than query
+            element = await self.threads_container.read_item(
+                item=element_id, partition_key=thread_id
             )
-        ]
-
-        if not elements:
-            return None
-
-        return cast("ElementDict", elements[0])
+            # Verify it's actually an element
+            if element.get("data_type") == "ELEMENT":
+                return cast("ElementDict", element)
+        except exceptions.CosmosResourceNotFoundError:
+            pass
+        
+        return None
 
     @queue_until_user_message()
     async def delete_element(self, element_id: str, thread_id: str | None = None):
@@ -429,7 +288,19 @@ class CosmosDBDataLayer(BaseDataLayer):
             element = await self.threads_container.read_item(
                 item=element_id, partition_key=thread_id
             )
-            await self.threads_container.delete_item(item=element_id, partition_key=thread_id)
+            
+            # Create tasks for parallel deletion
+            delete_tasks = [
+                self.threads_container.delete_item(item=element_id, partition_key=thread_id)
+            ]
+            
+            # Add storage file deletion if it exists and storage provider is configured
+            if self.storage_provider and element.get("objectKey"):
+                delete_tasks.append(
+                    self.storage_provider.delete_file(object_key=element["objectKey"])
+                )
+            
+            await asyncio.gather(*delete_tasks, return_exceptions=True)
         except exceptions.CosmosResourceNotFoundError:
             # Nothing to delete if not found
             return
@@ -495,25 +366,37 @@ class CosmosDBDataLayer(BaseDataLayer):
                     f"Thread list entry {thread_id} not found for user {user_id}"
                 )
 
-        # 3. Query all items in threads_container for this thread
+        # 3. Query all items in threads_container for this thread and delete storage files
         all_items_query = """
-        SELECT c.id FROM c 
+        SELECT * FROM c 
         WHERE c.threadId = @thread_id
         """
         parameters = [{"name": "@thread_id", "value": thread_id}]
 
-        # Get all item IDs
-        item_ids = [
-            item["id"]
+        # Get all items to delete storage files for elements
+        all_items = [
+            item
             async for item in self.threads_container.query_items(
                 query=all_items_query, partition_key=thread_id, parameters=parameters
             )
         ]
+        
+        # Create delete tasks for both Cosmos DB and storage
         delete_tasks = [
-            self.threads_container.delete_item(item=item_id, partition_key=thread_id)
-            for item_id in item_ids
+            self.threads_container.delete_item(item=item["id"], partition_key=thread_id)
+            for item in all_items
         ]
-        await asyncio.gather(*delete_tasks)
+        
+        # Add storage file deletion tasks for elements
+        if self.storage_provider:
+            for item in all_items:
+                if item.get("data_type") == "ELEMENT" and item.get("objectKey"):
+                    delete_tasks.append(
+                        self.storage_provider.delete_file(object_key=item["objectKey"])
+                    )
+        
+        # Execute all deletions in parallel
+        await asyncio.gather(*delete_tasks, return_exceptions=True)
 
     async def list_threads(
         self, pagination: "Pagination", filters: "ThreadFilter"
@@ -813,50 +696,3 @@ class CosmosDBDataLayer(BaseDataLayer):
     async def build_debug_url(self) -> str:
         return ""
 
-
-def get_principal_info(credential=None):
-    """
-    Gets information about the current authenticated principal
-    using the DefaultAzureCredential in a synchronous manner.
-    """
-    try:
-        # Use provided credential or create a new one with sync version
-        cred = credential or SyncDefaultAzureCredential()
-
-        # Get a token for ARM scope using sync method (no await)
-        token = cred.get_token("https://management.azure.com/.default")
-
-        if not token or not token.token:
-            logging.error("No token returned from credential")
-            return None
-
-        # Parse JWT token (format: header.payload.signature)
-        parts = token.token.split(".")
-        if len(parts) != 3:
-            logging.error("Token doesn't appear to be in JWT format")
-            return None
-
-        # Decode the payload (middle part)
-        # Add padding if needed
-        payload = parts[1]
-        padding = len(payload) % 4
-        if padding:
-            payload += "=" * (4 - padding)
-
-        decoded = base64.b64decode(payload)
-        claims = json.loads(decoded)
-
-        # Extract and print key information
-        principal_info = {
-            "object_id": claims.get("oid"),  # Object ID (principal ID)
-            "tenant_id": claims.get("tid"),  # Tenant ID
-            "name": claims.get("name"),  # User name (if available)
-            "upn": claims.get("upn"),  # User Principal Name (if user)
-            "app_id": claims.get("appid"),  # App ID (if service principal)
-        }
-
-        return principal_info
-
-    except Exception as e:
-        logging.error(f"Error getting principal info: {str(e)}")
-        return {"error": str(e)}

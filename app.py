@@ -159,6 +159,11 @@ ENABLE_AUTHENTICATION = config.get("ENABLE_AUTHENTICATION", False, bool)
 if ENABLE_AUTHENTICATION:
     import auth
 
+# Import data layer if chat history is enabled
+ENABLE_CHAT_HISTORY = config.get("ENABLE_CHAT_HISTORY", False, bool)
+if ENABLE_CHAT_HISTORY:
+    import data_layer
+
 tracer = Telemetry.get_tracer(__name__)
 
 # Register feedback handlers
@@ -270,25 +275,3 @@ async def handle_message(message: cl.Message):
         )
         response_msg.content = final_text
         await response_msg.send()
-
-@cl.data_layer
-def get_data_layer():
-    try:
-        from data_layer import CosmosDBDataLayer
-    except ModuleNotFoundError:
-        # Fallback: import by file path when running as top-level script or in non-package context
-        import importlib.util
-        import pathlib
-
-        data_layer_path = pathlib.Path(__file__).parent / "data_layer.py"
-        spec = importlib.util.spec_from_file_location("data_layer", str(data_layer_path))
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore
-        CosmosDBDataLayer = getattr(module, "CosmosDBDataLayer")
-
-    datalayer = CosmosDBDataLayer(
-        "cosmos-dbwrbdken34r274",
-        "chainlit",
-        account_endpoint="https://cosmos-wrbdken34r274.documents.azure.com:443/",
-    )
-    return datalayer
