@@ -14,6 +14,7 @@ from chainlit.data.base import BaseDataLayer
 from chainlit.data.storage_clients.base import BaseStorageClient
 from chainlit.data.utils import queue_until_user_message
 import asyncio
+from dependencies import get_config
 
 if TYPE_CHECKING:
     from chainlit.element import Element, ElementDict
