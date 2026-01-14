@@ -121,6 +121,7 @@ async def oauth_callback(
             "access_token": access_token,
             "refresh_token": refresh_token,
             "authorized": authorized,
+            "principal_id": user_id,
             "user_name": user_name,
             "client_principal_id": user_id,
             "client_principal_name": principal_name,
