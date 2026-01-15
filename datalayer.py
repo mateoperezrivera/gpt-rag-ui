@@ -335,6 +335,7 @@ class OrchestratorDataLayer(BaseDataLayer):
             return None
     
     async def update_thread(self, thread_id: str, **kwargs) -> None:
+        cl.user_session.set("conversation_id", thread_id)
         pass
     
     async def delete_thread(self, thread_id: str) -> bool:
